@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: uid, email, username, role, balance, totalEarnings, inGameId, teamName, phone, isBanned, createdAt, bio, profilePicUrl, contactInfo
+    //
+    // Collection: users_public
+    // Fields: uid, username, totalEarnings, inGameId, role, updatedAt
+    //
+    // Collection: tournaments
+    // Fields: id, title, game, gameMode, entryFee, prizePool, startTime, status, hostId, hostName, maxParticipants, currentParticipants, rules, banner, resultUrl, winners
+    //
+    // Collection: participants
+    // Fields: tournamentId, userId, username, inGameId, teamName, joinedAt, status
+    //
+    // Collection: notifications
+    // Fields: userId, title, message, type, read, createdAt, tournamentId
+    //
+    // Collection: transactions
+    // Fields: userId, amount, type, description, status, createdAt, proofUrl, rejectionReason, accountDetails
+    //
+    // Collection: slides
+    // Fields: image, title, link, active, order
+    //
+    // Collection: promocodes
+    // Fields: code, discount, type, maxUses, usedCount, active, expiryDate
+    //
+    // Collection: paymentMethods
+    // Fields: name, qrUrl, instructions, type, isActive, createdAt
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "unishghimire2@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isOrganizer() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'organizer' || isAdmin());
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Users Collection (Private PII)
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isOwner(userId) && 
+        request.resource.data.role == 'player' && // Default role
+        request.resource.data.balance == 0 &&
+        request.resource.data.totalEarnings == 0;
+        
+      allow update: if (isOwner(userId) && 
+        request.resource.data.role == resource.data.role && // Cannot change own role
+        request.resource.data.balance == resource.data.balance && // Cannot change own balance
+        request.resource.data.totalEarnings == resource.data.totalEarnings &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email) || isAdmin();
+    }
+
+    // Public User Profiles (For Leaderboard)
+    match /users_public/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // Games Listing
+    match /games/{gameId} {
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Tournaments
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow create: if isOrganizer();
+      allow update: if isAdmin() || (isOrganizer() && resource.data.hostId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // Participants
+    match /participants/{participantId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isAuthenticated() && (resource.data.userId == request.auth.uid || 
+        get(/databases/$(database)/documents/tournaments/$(resource.data.tournamentId)).data.hostId == request.auth.uid));
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated(); // Allow users to notify each other (e.g. system actions)
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Transactions
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'pending');
+      allow update, delete: if isAdmin();
+    }
+
+    // Payment Methods
+    match /paymentMethods/{methodId} {
+      allow read: if resource.data.isActive == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Slides
+    match /slides/{slideId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Promo Codes
+    match /promocodes/{codeId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

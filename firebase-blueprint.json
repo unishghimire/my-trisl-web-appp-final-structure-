@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["player", "organizer", "admin"] },
+        "balance": { "type": "number" },
+        "totalEarnings": { "type": "number" },
+        "inGameId": { "type": "string" },
+        "teamName": { "type": "string" },
+        "phone": { "type": "string" },
+        "isBanned": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "bio": { "type": "string" },
+        "profilePicUrl": { "type": "string" },
+        "contactInfo": { "type": "string" }
+      },
+      "required": ["uid", "email", "username", "role", "balance", "totalEarnings"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "Tournament details",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "game": { "type": "string" },
+        "prizePool": { "type": "number" },
+        "entryFee": { "type": "number" },
+        "slots": { "type": "integer" },
+        "currentPlayers": { "type": "integer" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "completed"] },
+        "hostUid": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "game", "prizePool", "entryFee", "slots", "currentPlayers", "status", "hostUid", "startTime"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "Tournament participant record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "inGameId": { "type": "string" },
+        "username": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "tournamentId", "inGameId", "username", "timestamp"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Wallet transaction record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["deposit", "withdrawal", "prize"] },
+        "amount": { "type": "number" },
+        "method": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "success", "rejected"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "proofUrl": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "accountDetails": { "type": "string" }
+      },
+      "required": ["userId", "type", "amount", "status", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "alert"] },
+        "read": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "read", "timestamp"]
+    },
+    "PaymentMethod": {
+      "title": "PaymentMethod",
+      "description": "Admin-managed payment methods and QR codes",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "qrUrl": { "type": "string" },
+        "instructions": { "type": "string" },
+        "type": { "type": "string", "enum": ["eSewa", "Khalti", "Bank", "Other"] },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "qrUrl", "instructions", "type", "isActive", "createdAt"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Public user profile for leaderboard",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "totalEarnings": { "type": "number" },
+        "inGameId": { "type": "string" },
+        "role": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "totalEarnings"]
+    },
+    "Game": {
+      "title": "Game",
+      "description": "Game details and available modes",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "logoUrl", "modes", "isPublished", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents"
+    },
+    "/users_public/{userId}": {
+      "schema": "PublicProfile",
+      "description": "Public user profile documents"
+    },
+    "/games/{gameId}": {
+      "schema": "Game",
+      "description": "Game listing documents"
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Tournament documents"
+    },
+    "/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Tournament participant records"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Wallet transaction records"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notification records"
+    },
+    "/paymentMethods/{methodId}": {
+      "schema": "PaymentMethod",
+      "description": "Payment method and QR code documents"
+    }
+  }
+}
