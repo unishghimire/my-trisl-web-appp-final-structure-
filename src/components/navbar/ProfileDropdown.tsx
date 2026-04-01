@@ -39,6 +39,12 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, 
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-48 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-50">
+          <Link to="/dashboard" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
+            <User className="w-4 h-4" /> Dashboard
+          </Link>
+          <Link to="/leaderboard" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
+            <Trophy className="w-4 h-4" /> Leaderboard
+          </Link>
           <Link to="/profile" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
             <User className="w-4 h-4" /> View Profile
           </Link>

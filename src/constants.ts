@@ -54,5 +54,8 @@ export const PRESET_TOURNAMENT_BANNERS = [
     'https://images.unsplash.com/photo-1552820728-8b83bb6b773f?q=80&w=2070&auto=format&fit=crop', // Controller Neon
     'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?q=80&w=2165&auto=format&fit=crop', // Abstract Tech
     'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=2070&auto=format&fit=crop', // Retro Gaming
-    'https://images.unsplash.com/photo-1616565433290-7603b51e0e85?q=80&w=2070&auto=format&fit=crop' // Cyberpunk City
+    'https://images.unsplash.com/photo-1616565433290-7603b51e0e85?q=80&w=2070&auto=format&fit=crop', // Cyberpunk City
+    'https://images.unsplash.com/photo-1511884642898-4c92249e20b6?q=80&w=2070&auto=format&fit=crop', // Abstract Blue
+    'https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070&auto=format&fit=crop', // Abstract Purple
+    'https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?q=80&w=2187&auto=format&fit=crop' // Abstract Dark
 ];

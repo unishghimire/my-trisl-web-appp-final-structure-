@@ -4,13 +4,14 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { Transaction, UserProfile, Slide, PromoCode, Game, PaymentMethod, SiteSettings } from '../types';
+import { Transaction, UserProfile, Slide, PromoCode, Game, PaymentMethod, SiteSettings, OrgApplication, Tournament } from '../types';
 import { formatCurrency, formatDate } from '../utils';
 import { NotificationService } from '../services/NotificationService';
 import ConfirmModal from '../components/ConfirmModal';
+import TournamentCreateModal from '../components/TournamentCreateModal';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
 import { DEFAULT_BANNER, NEXPLAY_LOGO } from '../constants';
-import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info } from 'lucide-react';
+import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info, ExternalLink, CheckCircle } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
     const { profile } = useAuth();
@@ -18,6 +19,11 @@ const AdminPanel: React.FC = () => {
     const [activeTab, setActiveTab] = useState('tab-dashboard');
     const [pendingTransactions, setPendingTransactions] = useState<Transaction[]>([]);
     const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+    const [allTournaments, setAllTournaments] = useState<Tournament[]>([]);
+    const [orgApplications, setOrgApplications] = useState<OrgApplication[]>([]);
+    const [organizers, setOrganizers] = useState<UserProfile[]>([]);
+    const [orgTournaments, setOrgTournaments] = useState<Tournament[]>([]);
+    const [selectedOrgId, setSelectedOrgId] = useState<string>('');
     const [slides, setSlides] = useState<Slide[]>([]);
     const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
     const [users, setUsers] = useState<UserProfile[]>([]);
@@ -68,6 +74,7 @@ const AdminPanel: React.FC = () => {
     const [supportPhone, setSupportPhone] = useState('');
     const [notice, setNotice] = useState('');
     const [isNoticeActive, setIsNoticeActive] = useState(false);
+    const [orgFormDescription, setOrgFormDescription] = useState('');
 
     const { handlePaste: handlePasteSlide, handleDrop: handleDropSlide, handleDragOver: handleDragOverSlide } = useInvisibleImage({
         onUploadStart: () => setUploading(true),
@@ -99,6 +106,21 @@ const AdminPanel: React.FC = () => {
     const [adjustmentAmount, setAdjustmentAmount] = useState('');
     const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract'>('add');
 
+    // Organizer Edit State
+    const [isOrgEditModalOpen, setIsOrgEditModalOpen] = useState(false);
+    const [editingOrg, setEditingOrg] = useState<UserProfile | null>(null);
+    const [orgEmail, setOrgEmail] = useState('');
+    const [orgDiscord, setOrgDiscord] = useState('');
+    const [orgYoutube, setOrgYoutube] = useState('');
+    const [orgWhatsapp, setOrgWhatsapp] = useState('');
+    const [orgNameEdit, setOrgNameEdit] = useState('');
+
+    // Transaction Filter State
+    const [txFilterStatus, setTxFilterStatus] = useState<'all' | 'pending' | 'success' | 'rejected' | 'refunded'>('all');
+    const [txFilterType, setTxFilterType] = useState<'all' | 'deposit' | 'withdrawal' | 'prize' | 'refund' | 'entry_fee'>('all');
+    const [txFilterTournament, setTxFilterTournament] = useState<string>('all');
+    const [txSearchUser, setTxSearchUser] = useState('');
+
     // Confirm Modal State
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
@@ -126,8 +148,12 @@ const AdminPanel: React.FC = () => {
                 setPendingTransactions(txSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
 
                 // Fetch all recent transactions
-                const allTxSnap = await getDocs(query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(50)));
+                const allTxSnap = await getDocs(query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(100)));
                 setAllTransactions(allTxSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
+
+                // Fetch all tournaments for filtering
+                const tourneySnap = await getDocs(query(collection(db, 'tournaments'), orderBy('createdAt', 'desc')));
+                setAllTournaments(tourneySnap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
 
                 // Fetch slides
                 const slideSnap = await getDocs(query(collection(db, 'slides'), orderBy('createdAt', 'desc')));
@@ -145,6 +171,14 @@ const AdminPanel: React.FC = () => {
                 const paySnap = await getDocs(query(collection(db, 'paymentMethods'), orderBy('createdAt', 'desc')));
                 setPaymentMethods(paySnap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentMethod)));
 
+                // Fetch Org Applications
+                const orgAppSnap = await getDocs(query(collection(db, 'orgApplications'), where('status', '==', 'pending'), orderBy('timestamp', 'desc')));
+                setOrgApplications(orgAppSnap.docs.map(d => ({ id: d.id, ...d.data() } as OrgApplication)));
+
+                // Fetch Organizers
+                const orgsSnap = await getDocs(query(collection(db, 'users'), where('role', 'in', ['organizer', 'admin'])));
+                setOrganizers(orgsSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+
                 // Fetch stats
                 const usersSnap = await getDocs(collection(db, 'users'));
                 let totalBal = 0;
@@ -160,6 +194,7 @@ const AdminPanel: React.FC = () => {
                     setSupportPhone(data.supportPhone);
                     setNotice(data.notice);
                     setIsNoticeActive(data.isNoticeActive);
+                    setOrgFormDescription(data.orgFormDescription || '');
                 }
 
                 const startOfDay = new Date();
@@ -194,7 +229,11 @@ const AdminPanel: React.FC = () => {
             if (tx.type === 'deposit') {
                 batch.update(userRef, { balance: increment(tx.amount) });
             }
-            batch.update(txRef, { status: 'success' });
+            batch.update(txRef, { 
+                status: 'success',
+                confirmedBy: profile?.uid,
+                confirmedByUsername: profile?.username
+            });
             await batch.commit();
 
             // Send Notification
@@ -208,10 +247,62 @@ const AdminPanel: React.FC = () => {
 
             showToast('Transaction Approved', 'success');
             setPendingTransactions(prev => prev.filter(t => t.id !== tx.id));
+            setAllTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'success' } : t));
         } catch (error) {
             console.error("Error approving transaction:", error);
             showToast('Failed to approve transaction', 'error');
         }
+    };
+
+    const handleRefundTx = async (tx: Transaction) => {
+        if (tx.status === 'refunded') return;
+        
+        setConfirmModal({
+            isOpen: true,
+            title: 'Confirm Refund',
+            message: `Are you sure you want to refund ${formatCurrency(Math.abs(tx.amount))} to ${tx.username}? This will add the amount back to their wallet balance.`,
+            onConfirm: async () => {
+                try {
+                    setLoading(true);
+                    const batch = writeBatch(db);
+                    const txRef = doc(db, 'transactions', tx.id);
+                    const userRef = doc(db, 'users', tx.userId);
+
+                    // 1. Update user balance
+                    batch.update(userRef, { balance: increment(Math.abs(tx.amount)) });
+
+                    // 2. Update transaction status
+                    batch.update(txRef, { 
+                        status: 'refunded',
+                        confirmedBy: profile?.uid,
+                        confirmedByUsername: profile?.username
+                    });
+
+                    // 3. Create a new refund record for clarity if needed, 
+                    // but usually updating the original is enough for manual override.
+                    
+                    await batch.commit();
+
+                    // Send Notification
+                    await NotificationService.create(
+                        tx.userId,
+                        'Transaction Refunded',
+                        `Your transaction of ${formatCurrency(Math.abs(tx.amount))} has been manually refunded by an admin.`,
+                        'info',
+                        '/wallet'
+                    );
+
+                    showToast('Transaction Refunded', 'success');
+                    setAllTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'refunded' } : t));
+                    setSelectedTx(null);
+                } catch (error) {
+                    console.error("Error refunding transaction:", error);
+                    showToast('Failed to refund transaction', 'error');
+                } finally {
+                    setLoading(false);
+                }
+            }
+        });
     };
 
     const executeRejectTx = async (tx: Transaction, reason: string) => {
@@ -225,7 +316,9 @@ const AdminPanel: React.FC = () => {
             }
             batch.update(txRef, { 
                 status: 'rejected',
-                rejectionReason: reason || 'No reason provided'
+                rejectionReason: reason || 'No reason provided',
+                confirmedBy: profile?.uid,
+                confirmedByUsername: profile?.username
             });
             await batch.commit();
 
@@ -295,6 +388,179 @@ const AdminPanel: React.FC = () => {
         }
     };
 
+    const handleApproveOrg = async (app: OrgApplication) => {
+        try {
+            const batch = writeBatch(db);
+            const appRef = doc(db, 'orgApplications', app.id);
+            const userRef = doc(db, 'users', app.userId);
+
+            batch.update(userRef, { 
+                role: 'organizer',
+                orgStatus: 'approved',
+                orgName: app.orgName,
+                isOrganizer: true
+            });
+            batch.update(appRef, { status: 'approved' });
+            
+            await batch.commit();
+
+            await NotificationService.create(
+                app.userId,
+                'Organizer Application Approved',
+                `Congratulations! Your application for ${app.orgName} has been approved. You can now host tournaments.`,
+                'success',
+                '/organizer-panel'
+            );
+
+            showToast('Application Approved', 'success');
+            setOrgApplications(prev => prev.filter(a => a.id !== app.id));
+        } catch (error) {
+            console.error("Error approving org:", error);
+            showToast('Failed to approve application', 'error');
+        }
+    };
+
+    const handleCancelTournament = async (tournament: Tournament) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Cancel Tournament',
+            message: `Are you sure you want to cancel "${tournament.title}"? All registered players will be automatically refunded. This action cannot be undone.`,
+            isDestructive: true,
+            onConfirm: async () => {
+                try {
+                    setLoading(true);
+                    const batch = writeBatch(db);
+                    
+                    // 1. Update tournament status
+                    const tournamentRef = doc(db, 'tournaments', tournament.id);
+                    batch.update(tournamentRef, { status: 'cancelled' });
+
+                    // 2. Fetch participants and pending transactions related to this tournament
+                    const [participantsSnap, pendingTxSnap] = await Promise.all([
+                        getDocs(query(collection(db, 'participants'), where('tournamentId', '==', tournament.id))),
+                        getDocs(query(collection(db, 'transactions'), where('tournamentId', '==', tournament.id), where('status', '==', 'pending')))
+                    ]);
+
+                    const participants = participantsSnap.docs.map(d => d.data());
+                    const pendingTxs = pendingTxSnap.docs;
+
+                    // 3. Reject any pending transactions related to this tournament
+                    for (const txDoc of pendingTxs) {
+                        batch.update(txDoc.ref, { 
+                            status: 'rejected', 
+                            rejectionReason: 'Tournament Cancelled',
+                            confirmedBy: profile?.uid,
+                            confirmedByUsername: profile?.username
+                        });
+                    }
+
+                    // 4. Process refunds for participants
+                    for (const participant of participants) {
+                        const userRef = doc(db, 'users', participant.userId);
+                        const refundAmount = tournament.entryFee;
+
+                        if (refundAmount > 0) {
+                            // Update user balance
+                            batch.update(userRef, { balance: increment(refundAmount) });
+
+                            // Create refund transaction
+                            const txRef = doc(collection(db, 'transactions'));
+                            batch.set(txRef, {
+                                userId: participant.userId,
+                                username: participant.username,
+                                type: 'refund',
+                                amount: refundAmount,
+                                method: 'Wallet Refund',
+                                refId: `REFUND-${tournament.id}-${participant.userId.slice(0, 5)}`,
+                                status: 'refunded',
+                                timestamp: serverTimestamp(),
+                                desc: `Refund for cancelled tournament: ${tournament.title}`,
+                                tournamentId: tournament.id,
+                                confirmedBy: profile?.uid,
+                                confirmedByUsername: profile?.username
+                            });
+
+                            // Send notification
+                            await NotificationService.create(
+                                participant.userId,
+                                'Tournament Cancelled - Refunded',
+                                `The tournament "${tournament.title}" has been cancelled. Your entry fee of ${formatCurrency(refundAmount)} has been refunded to your wallet.`,
+                                'info',
+                                '/wallet'
+                            );
+                        }
+                    }
+
+                    // 4. Create Activity Log
+                    const logRef = doc(collection(db, 'activityLogs'));
+                    batch.set(logRef, {
+                        type: 'tournament_cancellation',
+                        adminId: profile?.uid,
+                        adminName: profile?.username,
+                        tournamentId: tournament.id,
+                        tournamentTitle: tournament.title,
+                        timestamp: serverTimestamp(),
+                        details: `Cancelled tournament and refunded ${participants.length} players.`
+                    });
+
+                    await batch.commit();
+                    showToast('Tournament cancelled and refunds processed', 'success');
+                    
+                    // Refresh tournaments if needed
+                    if (selectedOrgId) {
+                        fetchOrgTournaments(selectedOrgId);
+                    }
+                } catch (error) {
+                    console.error("Error cancelling tournament:", error);
+                    showToast('Failed to cancel tournament', 'error');
+                } finally {
+                    setLoading(false);
+                    closeConfirmModal();
+                }
+            }
+        });
+    };
+
+    const handleRejectOrg = async (app: OrgApplication) => {
+        try {
+            const batch = writeBatch(db);
+            const appRef = doc(db, 'orgApplications', app.id);
+            const userRef = doc(db, 'users', app.userId);
+
+            batch.update(userRef, { orgStatus: 'rejected' });
+            batch.update(appRef, { status: 'rejected' });
+            
+            await batch.commit();
+
+            await NotificationService.create(
+                app.userId,
+                'Organizer Application Rejected',
+                `We regret to inform you that your application for ${app.orgName} was rejected.`,
+                'alert',
+                '/contact'
+            );
+
+            showToast('Application Rejected', 'success');
+            setOrgApplications(prev => prev.filter(a => a.id !== app.id));
+        } catch (error) {
+            console.error("Error rejecting org:", error);
+            showToast('Failed to reject application', 'error');
+        }
+    };
+
+    const fetchOrgTournaments = async (orgId: string) => {
+        if (!orgId) return;
+        setSelectedOrgId(orgId);
+        try {
+            const q = query(collection(db, 'tournaments'), where('hostUid', '==', orgId), orderBy('createdAt', 'desc'));
+            const snap = await getDocs(q);
+            setOrgTournaments(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Tournament)));
+        } catch (error) {
+            console.error("Error fetching org tournaments:", error);
+            showToast('Failed to fetch tournaments', 'error');
+        }
+    };
+
     const handleSavePayment = async () => {
         if (!paymentName || !paymentQr || !paymentInstructions) return showToast('Please fill all fields', 'warning');
         
@@ -352,15 +618,45 @@ const AdminPanel: React.FC = () => {
     };
 
     const handleSearchUsers = async () => {
+        if (!searchQuery.trim()) {
+            const snap = await getDocs(query(collection(db, 'users'), limit(20)));
+            setUsers(snap.docs.map(d => ({ uid: d.id, ...(d.data() as any) } as UserProfile)));
+            return;
+        }
+
+        setLoading(true);
         try {
-            let q = query(collection(db, 'users'), limit(20));
-            if (searchQuery) {
-                q = query(collection(db, 'users'), where('username', '>=', searchQuery), where('username', '<=', searchQuery + '\uf8ff'), limit(20));
+            let q;
+            if (searchQuery.includes('@')) {
+                q = query(collection(db, 'users'), where('email', '==', searchQuery.trim().toLowerCase()), limit(1));
+            } else {
+                q = query(collection(db, 'users'), 
+                    where('username', '>=', searchQuery), 
+                    where('username', '<=', searchQuery + '\uf8ff'), 
+                    limit(20)
+                );
             }
             const snap = await getDocs(q);
-            setUsers(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+            setUsers(snap.docs.map(d => ({ uid: d.id, ...(d.data() as any) } as UserProfile)));
         } catch (error) {
             console.error("Error searching users:", error);
+            showToast('Search failed', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUpdateUserRole = async (uid: string, newRole: 'admin' | 'organizer' | 'player') => {
+        try {
+            await updateDoc(doc(db, 'users', uid), { role: newRole });
+            setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role: newRole } : u));
+            if (selectedUser?.uid === uid) {
+                setSelectedUser(prev => prev ? { ...prev, role: newRole } : null);
+            }
+            showToast(`User role updated to ${newRole}`, 'success');
+        } catch (error) {
+            console.error("Error updating user role:", error);
+            showToast('Failed to update user role', 'error');
         }
     };
 
@@ -506,6 +802,20 @@ const AdminPanel: React.FC = () => {
         });
     };
 
+    // Tournament Management State
+    const [isTournamentModalOpen, setIsTournamentModalOpen] = useState(false);
+    const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
+
+    const handleEditTournament = (tournament: Tournament) => {
+        setSelectedTournament(tournament);
+        setIsTournamentModalOpen(true);
+    };
+
+    const handleViewParticipants = (tournament: Tournament) => {
+        // Redirect to tournament page or show a modal
+        window.open(`/tournament/${tournament.id}`, '_blank');
+    };
+
     const handleSaveSettings = async () => {
         try {
             const settingsData = {
@@ -514,6 +824,8 @@ const AdminPanel: React.FC = () => {
                 supportPhone,
                 notice,
                 isNoticeActive,
+                isOrgFormOpen: siteSettings?.isOrgFormOpen ?? true,
+                orgFormDescription,
                 updatedAt: serverTimestamp()
             };
             await setDoc(doc(db, 'settings', 'site'), settingsData);
@@ -522,6 +834,50 @@ const AdminPanel: React.FC = () => {
         } catch (error) {
             console.error("Error saving settings:", error);
             showToast('Failed to save settings', 'error');
+        }
+    };
+
+    const toggleOrgForm = async () => {
+        if (!siteSettings) return;
+        try {
+            const newValue = !siteSettings.isOrgFormOpen;
+            await updateDoc(doc(db, 'settings', 'site'), { isOrgFormOpen: newValue });
+            setSiteSettings(prev => prev ? { ...prev, isOrgFormOpen: newValue } : null);
+            showToast(`Organizer applications ${newValue ? 'opened' : 'closed'}`, 'success');
+        } catch (error) {
+            console.error("Error toggling org form:", error);
+            showToast('Failed to toggle form', 'error');
+        }
+    };
+
+    const handleSaveOrgDetails = async () => {
+        if (!editingOrg) return;
+        try {
+            const updateData = {
+                email: orgEmail,
+                discord: orgDiscord,
+                youtube: orgYoutube,
+                whatsapp: orgWhatsapp,
+                orgName: orgNameEdit
+            };
+            await updateDoc(doc(db, 'users', editingOrg.uid), updateData);
+            setOrganizers(prev => prev.map(o => o.uid === editingOrg.uid ? { ...o, ...updateData } : o));
+            showToast('Organizer details updated', 'success');
+            setIsOrgEditModalOpen(false);
+        } catch (error) {
+            console.error("Error saving org details:", error);
+            showToast('Failed to save details', 'error');
+        }
+    };
+
+    const handleSuspendOrg = async (uid: string, isSuspended: boolean) => {
+        try {
+            await updateDoc(doc(db, 'users', uid), { isBanned: isSuspended });
+            setOrganizers(prev => prev.map(o => o.uid === uid ? { ...o, isBanned: isSuspended } : o));
+            showToast(`Organizer ${isSuspended ? 'suspended' : 'activated'}`, 'success');
+        } catch (error) {
+            console.error("Error suspending org:", error);
+            showToast('Failed to update status', 'error');
         }
     };
 
@@ -560,34 +916,126 @@ const AdminPanel: React.FC = () => {
     return (
         <div className="animate-fade-in max-w-7xl mx-auto flex flex-col md:flex-row gap-6">
             {/* Sidebar Navigation */}
-            <div className="w-full md:w-64 shrink-0 space-y-2 bg-card p-4 rounded-2xl border border-gray-800 h-fit sticky top-24">
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 px-2">Admin Menu</div>
-                {[
-                    { id: 'dashboard', icon: Layout, label: 'Dashboard' },
-                    { id: 'transactions', icon: CreditCard, label: 'Transactions' },
-                    { id: 'users', icon: Users, label: 'Users' },
-                    { id: 'games', icon: Gamepad2, label: 'Games' },
-                    { id: 'payments', icon: QrCode, label: 'Payments' },
-                    { id: 'promo', icon: Tag, label: 'Promo Codes' },
-                    { id: 'settings', icon: Sliders, label: 'Settings' }
-                ].map(tab => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === `tab-${tab.id}`;
-                    return (
+            <div className="w-full md:w-64 shrink-0 space-y-6 bg-card p-4 rounded-2xl border border-gray-800 h-fit sticky top-24">
+                <div>
+                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">Main</div>
+                    <div className="space-y-1">
                         <button 
-                            key={tab.id}
-                            onClick={() => setActiveTab(`tab-${tab.id}`)} 
+                            onClick={() => setActiveTab('tab-dashboard')} 
                             className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
-                                isActive 
+                                activeTab === 'tab-dashboard' 
                                     ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
                                     : 'text-gray-400 hover:bg-dark hover:text-white'
                             }`}
                         >
-                            <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
-                            {tab.label}
+                            <Layout className={`w-5 h-5 ${activeTab === 'tab-dashboard' ? 'text-white' : 'text-gray-500'}`} />
+                            Dashboard
                         </button>
-                    );
-                })}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">Financial</div>
+                    <div className="space-y-1">
+                        {[
+                            { id: 'pending-deposits', icon: ArrowDown, label: 'Pending Deposits' },
+                            { id: 'pending-withdrawals', icon: ArrowUp, label: 'Pending Withdrawals' },
+                            { id: 'tx-history', icon: CreditCard, label: 'Transaction History' }
+                        ].map(tab => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === `tab-${tab.id}`;
+                            return (
+                                <button 
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(`tab-${tab.id}`)} 
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                        isActive 
+                                            ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+                                            : 'text-gray-400 hover:bg-dark hover:text-white'
+                                    }`}
+                                >
+                                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">Organizations</div>
+                    <div className="space-y-1">
+                        {[
+                            { id: 'org-approvals', icon: Check, label: 'Org Approvals' },
+                            { id: 'org-tournaments', icon: Trophy, label: 'Org Tournaments' },
+                            { id: 'organizers', icon: Users, label: 'Manage Orgs' }
+                        ].map(tab => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === `tab-${tab.id}`;
+                            return (
+                                <button 
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(`tab-${tab.id}`)} 
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                        isActive 
+                                            ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+                                            : 'text-gray-400 hover:bg-dark hover:text-white'
+                                    }`}
+                                >
+                                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">Management</div>
+                    <div className="space-y-1">
+                        {[
+                            { id: 'tournaments', icon: Trophy, label: 'Tournaments' },
+                            { id: 'users', icon: Users, label: 'Users' },
+                            { id: 'games', icon: Gamepad2, label: 'Games' },
+                            { id: 'payments', icon: QrCode, label: 'Payments' },
+                            { id: 'promo', icon: Tag, label: 'Promo Codes' }
+                        ].map(tab => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === `tab-${tab.id}`;
+                            return (
+                                <button 
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(`tab-${tab.id}`)} 
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                        isActive 
+                                            ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+                                            : 'text-gray-400 hover:bg-dark hover:text-white'
+                                    }`}
+                                >
+                                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">System</div>
+                    <div className="space-y-1">
+                        <button 
+                            onClick={() => setActiveTab('tab-settings')} 
+                            className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                activeTab === 'tab-settings' 
+                                    ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+                                    : 'text-gray-400 hover:bg-dark hover:text-white'
+                            }`}
+                        >
+                            <Sliders className={`w-5 h-5 ${activeTab === 'tab-settings' ? 'text-white' : 'text-gray-500'}`} />
+                            Settings
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Main Content Area */}
@@ -646,6 +1094,7 @@ const AdminPanel: React.FC = () => {
                                                     <span className={`font-black tracking-wider ${t.type === 'deposit' ? 'text-green-400' : 'text-red-400'} uppercase text-xs`}>{t.type}</span>
                                                     <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
                                                 </div>
+                                                <div className="text-white font-bold text-sm mb-1">{t.username || 'Unknown User'}</div>
                                                 <div className="text-[10px] text-gray-500 font-mono">{formatDate(t.timestamp)}</div>
                                             </div>
                                             <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
@@ -700,8 +1149,16 @@ const AdminPanel: React.FC = () => {
                                                     <span className="text-white">{selectedTx.method}</span>
                                                 </div>
                                                 <div className="flex justify-between border-b border-gray-800/50 pb-2">
+                                                    <span className="text-gray-500">User</span>
+                                                    <span className="text-white">{selectedTx.username || 'Unknown'}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
+                                                    <span className="text-gray-500">Email</span>
+                                                    <span className="text-white text-xs">{selectedTx.userEmail || 'N/A'}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
                                                     <span className="text-gray-500">User ID</span>
-                                                    <span className="text-gray-400 text-xs">{selectedTx.userId}</span>
+                                                    <span className="text-gray-400 text-[10px]">{selectedTx.userId}</span>
                                                 </div>
                                                 <div className="flex justify-between pb-1">
                                                     <span className="text-gray-500">Ref ID</span>
@@ -751,12 +1208,27 @@ const AdminPanel: React.FC = () => {
                                 </div>
 
                                 <div className="flex gap-4 pt-6 border-t border-gray-800">
-                                    <button onClick={() => handleRejectTx(selectedTx)} className="flex-1 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/30 hover:border-red-500 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
-                                        Reject
-                                    </button>
-                                    <button onClick={() => handleApproveTx(selectedTx)} className="flex-[2] bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
-                                        Approve Transaction
-                                    </button>
+                                    {selectedTx.status === 'pending' ? (
+                                        <>
+                                            <button onClick={() => handleRejectTx(selectedTx)} className="flex-1 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/30 hover:border-red-500 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
+                                                Reject
+                                            </button>
+                                            <button onClick={() => handleApproveTx(selectedTx)} className="flex-[2] bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
+                                                Approve
+                                            </button>
+                                        </>
+                                    ) : selectedTx.status === 'success' && (selectedTx.type === 'withdrawal' || selectedTx.type === 'entry_fee') ? (
+                                        <button 
+                                            onClick={() => handleRefundTx(selectedTx)} 
+                                            className="w-full bg-orange-600 hover:bg-orange-500 text-white py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm shadow-lg shadow-orange-600/20"
+                                        >
+                                            Manual Refund
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => setSelectedTx(null)} className="w-full bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
+                                            Close
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -870,57 +1342,541 @@ const AdminPanel: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'tab-transactions' && (
-                <div className="bg-card p-6 rounded-xl border border-gray-800">
-                    <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-widest border-b border-gray-700 pb-2">Recent Transactions</h2>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="text-[10px] text-gray-500 uppercase tracking-widest border-b border-gray-800">
-                                    <th className="py-3 px-4">Date</th>
-                                    <th className="py-3 px-4">User ID</th>
-                                    <th className="py-3 px-4">Type</th>
-                                    <th className="py-3 px-4">Method</th>
-                                    <th className="py-3 px-4">Amount</th>
-                                    <th className="py-3 px-4">Status</th>
-                                    <th className="py-3 px-4">Ref ID</th>
-                                </tr>
-                            </thead>
-                            <tbody className="text-xs">
-                                {allTransactions.map(t => (
-                                    <tr key={t.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
-                                        <td className="py-3 px-4 text-gray-400">{formatDate(t.timestamp)}</td>
-                                        <td className="py-3 px-4 text-gray-300 font-mono">{t.userId.slice(0, 8)}...</td>
-                                        <td className="py-3 px-4">
-                                            <span className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${
-                                                t.type === 'deposit' ? 'bg-green-900/30 text-green-400 border border-green-500/30' :
-                                                t.type === 'withdrawal' ? 'bg-red-900/30 text-red-400 border border-red-500/30' :
-                                                'bg-blue-900/30 text-blue-400 border border-blue-500/30'
-                                            }`}>
-                                                {t.type}
-                                            </span>
-                                        </td>
-                                        <td className="py-3 px-4 text-gray-400">{t.method}</td>
-                                        <td className={`py-3 px-4 font-bold ${t.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {formatCurrency(t.amount)}
-                                        </td>
-                                        <td className="py-3 px-4">
-                                            <span className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${
-                                                t.status === 'success' ? 'bg-green-600 text-white' :
-                                                t.status === 'pending' ? 'bg-yellow-600 text-white' :
-                                                'bg-red-600 text-white'
-                                            }`}>
-                                                {t.status}
-                                            </span>
-                                        </td>
-                                        <td className="py-3 px-4 text-gray-500 font-mono">{t.refId || 'N/A'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+            {activeTab === 'tab-tournaments' && (
+                <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                    <div className="flex justify-between items-center border-b border-gray-700 pb-4">
+                        <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                            <Trophy className="text-brand-500" /> All Tournaments
+                        </h2>
+                        <div className="flex items-center gap-4">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Search tournaments..." 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:border-brand-500 outline-none w-64"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {allTournaments
+                            .filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                            .map(t => (
+                                <div key={t.id} className="bg-dark p-4 rounded-xl border border-gray-800 space-y-3">
+                                    <img src={t.bannerUrl} className="w-full aspect-video object-cover rounded-lg" alt={t.title} />
+                                    <div>
+                                        <h3 className="font-bold text-white truncate">{t.title}</h3>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <span className="text-[10px] text-gray-500 uppercase font-bold">{t.game}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                                    t.status === 'upcoming' ? 'bg-blue-600/20 text-blue-400' :
+                                                    t.status === 'ongoing' ? 'bg-green-600/20 text-green-400' :
+                                                    t.status === 'cancelled' ? 'bg-red-600/20 text-red-400' :
+                                                    'bg-gray-600/20 text-gray-400'
+                                                }`}>
+                                                    {t.status}
+                                                </span>
+                                                <div className="flex gap-1">
+                                                    <button 
+                                                        onClick={() => handleViewParticipants(t)}
+                                                        className="p-1.5 bg-brand-600/20 hover:bg-brand-600 text-brand-500 hover:text-white rounded-lg transition-all border border-brand-500/30"
+                                                        title="View Participants"
+                                                    >
+                                                        <Users className="w-3 h-3" />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleEditTournament(t)}
+                                                        className="p-1.5 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg transition-all border border-blue-500/30"
+                                                        title="Edit Tournament"
+                                                    >
+                                                        <Edit className="w-3 h-3" />
+                                                    </button>
+                                                    {t.status !== 'cancelled' && t.status !== 'completed' && (
+                                                        <button 
+                                                            onClick={() => handleCancelTournament(t)}
+                                                            className="p-1.5 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-lg transition-all border border-red-500/30"
+                                                            title="Cancel Tournament"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                     </div>
                 </div>
             )}
+
+            {activeTab === 'tab-org-approvals' && (
+                <div className="bg-card p-6 rounded-xl border border-gray-800">
+                    <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-widest border-b border-gray-700 pb-2 flex items-center gap-2">
+                        <Check className="text-brand-500" /> Organization Approvals
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {orgApplications.length > 0 ? (
+                            orgApplications.map(app => (
+                                <div key={app.id} className="bg-dark p-6 rounded-2xl border border-gray-800 space-y-4">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-white">{app.orgName}</h3>
+                                            <p className="text-xs text-gray-500">Applied by: {app.username}</p>
+                                        </div>
+                                        <span className="bg-yellow-600/20 text-yellow-500 text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-yellow-500/30">
+                                            Pending
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 text-xs">
+                                        <div className="bg-black/30 p-3 rounded-xl border border-gray-800">
+                                            <div className="text-gray-500 uppercase font-bold text-[9px] mb-1">WhatsApp</div>
+                                            <div className="text-white">{app.whatsapp}</div>
+                                        </div>
+                                        <div className="bg-black/30 p-3 rounded-xl border border-gray-800">
+                                            <div className="text-gray-500 uppercase font-bold text-[9px] mb-1">Email</div>
+                                            <div className="text-white truncate">{app.email}</div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/30 p-3 rounded-xl border border-gray-800">
+                                        <div className="text-gray-500 uppercase font-bold text-[9px] mb-1">Proof Link</div>
+                                        <a href={app.proofLink} target="_blank" rel="noreferrer" className="text-brand-400 hover:text-brand-300 flex items-center gap-2 truncate">
+                                            <ExternalLink className="w-3 h-3" /> {app.proofLink}
+                                        </a>
+                                    </div>
+                                    <div className="flex gap-3 pt-2">
+                                        <button onClick={() => handleRejectOrg(app)} className="flex-1 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/30 hover:border-red-500 py-2.5 rounded-xl text-xs font-bold uppercase transition-all">
+                                            Reject
+                                        </button>
+                                        <button onClick={() => handleApproveOrg(app)} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2.5 rounded-xl text-xs font-bold uppercase transition-all">
+                                            Approve
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="col-span-full flex flex-col items-center justify-center py-20 text-gray-600">
+                                <CheckCircle className="w-12 h-12 mb-3 opacity-20" />
+                                <p className="text-sm font-bold uppercase tracking-widest">No pending applications</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'tab-org-tournaments' && (
+                <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                    <div className="flex justify-between items-center border-b border-gray-700 pb-4">
+                        <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                            <Trophy className="text-brand-500" /> Organization Tournaments
+                        </h2>
+                        <select 
+                            value={selectedOrgId}
+                            onChange={(e) => fetchOrgTournaments(e.target.value)}
+                            className="bg-dark border border-gray-700 rounded-lg p-2 text-white text-sm focus:border-brand-500 outline-none"
+                        >
+                            <option value="">Select Organization</option>
+                            {organizers.map(org => (
+                                <option key={org.uid} value={org.uid}>{org.username}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {orgTournaments.length > 0 ? (
+                            orgTournaments.map(t => (
+                                <div key={t.id} className="bg-dark p-4 rounded-xl border border-gray-800 space-y-3">
+                                    <img src={t.bannerUrl} className="w-full aspect-video object-cover rounded-lg" alt={t.title} />
+                                    <div>
+                                        <h3 className="font-bold text-white truncate">{t.title}</h3>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <span className="text-[10px] text-gray-500 uppercase font-bold">{t.game}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                                    t.status === 'upcoming' ? 'bg-blue-600/20 text-blue-400' :
+                                                    t.status === 'ongoing' ? 'bg-green-600/20 text-green-400' :
+                                                    t.status === 'cancelled' ? 'bg-red-600/20 text-red-400' :
+                                                    'bg-gray-600/20 text-gray-400'
+                                                }`}>
+                                                    {t.status}
+                                                </span>
+                                                <div className="flex gap-1">
+                                                    <button 
+                                                        onClick={() => handleViewParticipants(t)}
+                                                        className="p-1.5 bg-brand-600/20 hover:bg-brand-600 text-brand-500 hover:text-white rounded-lg transition-all border border-brand-500/30"
+                                                        title="View Participants"
+                                                    >
+                                                        <Users className="w-3 h-3" />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleEditTournament(t)}
+                                                        className="p-1.5 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg transition-all border border-blue-500/30"
+                                                        title="Edit Tournament"
+                                                    >
+                                                        <Edit className="w-3 h-3" />
+                                                    </button>
+                                                    {t.status !== 'cancelled' && t.status !== 'completed' && (
+                                                        <button 
+                                                            onClick={() => handleCancelTournament(t)}
+                                                            className="p-1.5 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-lg transition-all border border-red-500/30"
+                                                            title="Cancel Tournament"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        ) : selectedOrgId ? (
+                            <div className="col-span-full flex flex-col items-center justify-center py-20 text-gray-600">
+                                <Trophy className="w-12 h-12 mb-3 opacity-20" />
+                                <p className="text-sm font-bold uppercase tracking-widest">No tournaments found for this organization</p>
+                            </div>
+                        ) : (
+                            <div className="col-span-full flex flex-col items-center justify-center py-20 text-gray-600">
+                                <Users className="w-12 h-12 mb-3 opacity-20" />
+                                <p className="text-sm font-bold uppercase tracking-widest">Select an organization to view their tournaments</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'tab-organizers' && (
+                <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                    <div className="flex justify-between items-center border-b border-gray-700 pb-4">
+                        <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                            <Users className="text-brand-500" /> Manage Organizers
+                        </h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {organizers.map(org => (
+                            <div key={org.uid} className="bg-dark p-5 rounded-2xl border border-gray-800 space-y-4 relative overflow-hidden group">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 bg-brand-600/20 rounded-full flex items-center justify-center border border-brand-500/30">
+                                            <Users className="text-brand-500 w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-white">{org.username}</h3>
+                                            <p className="text-[10px] text-gray-500 uppercase font-bold">{org.orgName || 'No Org Name'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => {
+                                                setEditingOrg(org);
+                                                setOrgEmail(org.email);
+                                                setOrgDiscord(org.discord || '');
+                                                setOrgYoutube(org.youtube || '');
+                                                setOrgWhatsapp(org.whatsapp || '');
+                                                setOrgNameEdit(org.orgName || '');
+                                                setIsOrgEditModalOpen(true);
+                                            }}
+                                            className="p-2 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white rounded-xl transition-all border border-blue-500/30"
+                                        >
+                                            <Edit className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleSuspendOrg(org.uid, !org.isBanned)}
+                                            className={`p-2 rounded-xl transition-all border ${
+                                                org.isBanned 
+                                                    ? 'bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border-green-500/30' 
+                                                    : 'bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border-red-500/30'
+                                            }`}
+                                        >
+                                            {org.isBanned ? <CheckCircle className="w-4 h-4" /> : <Trash className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                    <div className="bg-black/30 p-2 rounded-lg border border-gray-800">
+                                        <div className="text-gray-600 uppercase font-bold mb-0.5">Email</div>
+                                        <div className="text-gray-300 truncate">{org.email}</div>
+                                    </div>
+                                    <div className="bg-black/30 p-2 rounded-lg border border-gray-800">
+                                        <div className="text-gray-600 uppercase font-bold mb-0.5">Status</div>
+                                        <div className={`font-bold ${org.isBanned ? 'text-red-500' : 'text-green-500'}`}>
+                                            {org.isBanned ? 'SUSPENDED' : 'ACTIVE'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {isOrgEditModalOpen && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
+                                <h3 className="text-xl font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-4">
+                                    Edit Organizer Details
+                                </h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Organization Name</label>
+                                        <input type="text" value={orgNameEdit} onChange={e => setOrgNameEdit(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Email</label>
+                                        <input type="email" value={orgEmail} onChange={e => setOrgEmail(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">WhatsApp</label>
+                                        <input type="text" value={orgWhatsapp} onChange={e => setOrgWhatsapp(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Discord</label>
+                                        <input type="text" value={orgDiscord} onChange={e => setOrgDiscord(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">YouTube</label>
+                                        <input type="text" value={orgYoutube} onChange={e => setOrgYoutube(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
+                                    </div>
+                                </div>
+                                <div className="flex gap-4 pt-4">
+                                    <button onClick={() => setIsOrgEditModalOpen(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-bold transition">Cancel</button>
+                                    <button onClick={handleSaveOrgDetails} className="flex-1 bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition">Save Changes</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+                {activeTab === 'tab-pending-deposits' && (
+                    <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                        <div className="flex justify-between items-center border-b border-gray-700 pb-4">
+                            <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                <ArrowDown className="text-green-500" /> Pending Deposits
+                            </h2>
+                            <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
+                                {allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} Pending
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[500px] overflow-y-auto custom-scrollbar content-start pr-2">
+                            {allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').length > 0 ? (
+                                allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').map(t => (
+                                    <div key={t.id} className="bg-dark/50 hover:bg-dark p-5 rounded-2xl border border-gray-800 hover:border-gray-700 transition-all shadow-md group">
+                                        <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-3">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="font-black tracking-wider text-green-400 uppercase text-xs">Deposit</span>
+                                                    <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
+                                                </div>
+                                                <div className="text-[10px] text-gray-500 font-mono">{formatDate(t.timestamp)}</div>
+                                            </div>
+                                            <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
+                                        </div>
+                                        <div className="text-[11px] text-gray-400 mb-5 bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                            <span className="text-gray-600">REF:</span> 
+                                            <span className="text-brand-300 select-all">{t.refId}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button onClick={() => handleApproveTx(t)} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
+                                                <Check className="w-4 h-4" /> Approve
+                                            </button>
+                                            <button onClick={() => setSelectedTx(t)} className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
+                                                <Eye className="w-4 h-4" /> Review
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="col-span-full h-full flex flex-col items-center justify-center text-gray-500 py-20">
+                                    <div className="w-16 h-16 bg-dark rounded-full flex items-center justify-center mb-4 border border-gray-800">
+                                        <Check className="text-3xl text-green-500/50" />
+                                    </div>
+                                    <p className="font-bold uppercase tracking-widest text-sm text-gray-600">All Caught Up!</p>
+                                    <p className="text-xs text-gray-700 mt-1">No pending deposits to review.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'tab-pending-withdrawals' && (
+                    <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                        <div className="flex justify-between items-center border-b border-gray-700 pb-4">
+                            <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                <ArrowUp className="text-red-500" /> Pending Withdrawals
+                            </h2>
+                            <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
+                                {allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').length} Pending
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[500px] overflow-y-auto custom-scrollbar content-start pr-2">
+                            {allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').length > 0 ? (
+                                allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').map(t => (
+                                    <div key={t.id} className="bg-dark/50 hover:bg-dark p-5 rounded-2xl border border-gray-800 hover:border-gray-700 transition-all shadow-md group">
+                                        <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-3">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="font-black tracking-wider text-red-400 uppercase text-xs">Withdrawal</span>
+                                                    <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
+                                                </div>
+                                                <div className="text-[10px] text-gray-500 font-mono">{formatDate(t.timestamp)}</div>
+                                            </div>
+                                            <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
+                                        </div>
+                                        <div className="text-[11px] text-gray-400 mb-5 bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                            <span className="text-gray-600">REF:</span> 
+                                            <span className="text-brand-300 select-all">{t.refId}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button onClick={() => handleApproveTx(t)} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
+                                                <Check className="w-4 h-4" /> Approve
+                                            </button>
+                                            <button onClick={() => setSelectedTx(t)} className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
+                                                <Eye className="w-4 h-4" /> Review
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="col-span-full h-full flex flex-col items-center justify-center text-gray-500 py-20">
+                                    <div className="w-16 h-16 bg-dark rounded-full flex items-center justify-center mb-4 border border-gray-800">
+                                        <Check className="text-3xl text-green-500/50" />
+                                    </div>
+                                    <p className="font-bold uppercase tracking-widest text-sm text-gray-600">All Caught Up!</p>
+                                    <p className="text-xs text-gray-700 mt-1">No pending withdrawals to review.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'tab-tx-history' && (
+                    <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-700 pb-4">
+                            <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                <CreditCard className="text-brand-500" /> Transaction History
+                            </h2>
+                            <div className="flex flex-wrap gap-2">
+                                <select 
+                                    value={txFilterType} 
+                                    onChange={e => setTxFilterType(e.target.value as any)}
+                                    className="bg-dark border border-gray-700 rounded-lg p-2 text-white text-xs focus:border-brand-500 outline-none"
+                                >
+                                    <option value="all">All Types</option>
+                                    <option value="deposit">Deposit</option>
+                                    <option value="withdrawal">Withdrawal</option>
+                                    <option value="prize">Prize</option>
+                                    <option value="refund">Refund</option>
+                                    <option value="entry_fee">Entry Fee</option>
+                                </select>
+                                <select 
+                                    value={txFilterStatus} 
+                                    onChange={e => setTxFilterStatus(e.target.value as any)}
+                                    className="bg-dark border border-gray-700 rounded-lg p-2 text-white text-xs focus:border-brand-500 outline-none"
+                                >
+                                    <option value="all">All Status</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="success">Success</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="refunded">Refunded</option>
+                                </select>
+                                <select 
+                                    value={txFilterTournament} 
+                                    onChange={e => setTxFilterTournament(e.target.value)}
+                                    className="bg-dark border border-gray-700 rounded-lg p-2 text-white text-xs focus:border-brand-500 outline-none w-40"
+                                >
+                                    <option value="all">All Tournaments</option>
+                                    {allTournaments.map(t => (
+                                        <option key={t.id} value={t.id}>{t.title}</option>
+                                    ))}
+                                </select>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search User..." 
+                                        value={txSearchUser}
+                                        onChange={e => setTxSearchUser(e.target.value)}
+                                        className="bg-dark border border-gray-700 rounded-lg p-2 pl-8 text-white text-xs focus:border-brand-500 outline-none w-40"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="text-[10px] text-gray-500 uppercase tracking-widest border-b border-gray-800">
+                                        <th className="py-3 px-4">Date</th>
+                                        <th className="py-3 px-4">User</th>
+                                        <th className="py-3 px-4">Type</th>
+                                        <th className="py-3 px-4">Method</th>
+                                        <th className="py-3 px-4">Amount</th>
+                                        <th className="py-3 px-4">Status</th>
+                                        <th className="py-3 px-4">Ref ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-xs">
+                                    {allTransactions
+                                        .filter(t => {
+                                            const matchesType = txFilterType === 'all' || t.type === txFilterType;
+                                            const matchesStatus = txFilterStatus === 'all' || t.status === txFilterStatus;
+                                            const matchesTournament = txFilterTournament === 'all' || t.tournamentId === txFilterTournament;
+                                            const matchesUser = !txSearchUser || 
+                                                t.username?.toLowerCase().includes(txSearchUser.toLowerCase()) ||
+                                                t.userEmail?.toLowerCase().includes(txSearchUser.toLowerCase());
+                                            return matchesType && matchesStatus && matchesUser && matchesTournament;
+                                        })
+                                        .map(t => (
+                                        <tr 
+                                            key={t.id} 
+                                            onClick={() => setSelectedTx(t)}
+                                            className="border-b border-gray-800/50 hover:bg-gray-800/30 transition cursor-pointer group"
+                                        >
+                                            <td className="py-3 px-4 text-gray-400">{formatDate(t.timestamp)}</td>
+                                            <td className="py-3 px-4">
+                                                <div className="text-white font-bold">{t.username || t.userId.slice(0, 8)}</div>
+                                                <div className="text-[9px] text-gray-500 truncate max-w-[100px]">{t.userEmail}</div>
+                                                {t.confirmedByUsername && <div className="text-[9px] text-brand-400 uppercase font-black">By: {t.confirmedByUsername}</div>}
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <span className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${
+                                                    t.type === 'deposit' ? 'bg-green-900/30 text-green-400 border border-green-500/30' :
+                                                    t.type === 'withdrawal' ? 'bg-red-900/30 text-red-400 border border-red-500/30' :
+                                                    t.type === 'refund' ? 'bg-orange-900/30 text-orange-400 border border-orange-500/30' :
+                                                    'bg-blue-900/30 text-blue-400 border border-blue-500/30'
+                                                }`}>
+                                                    {t.type}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-gray-400">{t.method}</td>
+                                            <td className={`py-3 px-4 font-bold ${t.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                {formatCurrency(t.amount)}
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <span className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${
+                                                    t.status === 'success' ? 'bg-green-600 text-white' :
+                                                    t.status === 'pending' ? 'bg-yellow-600 text-white' :
+                                                    t.status === 'refunded' ? 'bg-orange-600 text-white' :
+                                                    'bg-red-600 text-white'
+                                                }`}>
+                                                    {t.status}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-gray-500 font-mono flex items-center justify-between">
+                                                {t.refId || 'N/A'}
+                                                <Eye className="w-3 h-3 opacity-0 group-hover:opacity-100 transition text-brand-400" />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
             {activeTab === 'tab-users' && (
                 <div className="bg-card p-6 rounded-xl border border-gray-800">
@@ -1019,6 +1975,21 @@ const AdminPanel: React.FC = () => {
                                     <button onClick={handleAdjustBalance} className="w-full bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition uppercase text-sm">
                                         Confirm Adjustment
                                     </button>
+                                </div>
+
+                                <div className="space-y-4 border-t border-gray-800 pt-6">
+                                    <label className="text-xs text-gray-500 uppercase font-bold block">Update Role</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(['player', 'organizer', 'admin'] as const).map(role => (
+                                            <button 
+                                                key={role}
+                                                onClick={() => handleUpdateUserRole(selectedUser.uid, role)}
+                                                className={`py-2 rounded-lg font-bold text-[10px] uppercase border transition-all ${selectedUser.role === role ? 'bg-brand-600 border-brand-500 text-white' : 'bg-dark border-gray-700 text-gray-500 hover:border-gray-600'}`}
+                                            >
+                                                {role}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1484,6 +2455,31 @@ const AdminPanel: React.FC = () => {
                                     placeholder="Enter notice message here... (e.g. Scheduled maintenance at 10 PM)"
                                 />
                             </div>
+
+                            <h3 className="text-sm font-bold text-brand-400 uppercase tracking-widest border-l-2 border-brand-500 pl-3 pt-4">Organizer Settings</h3>
+                            <div className="bg-dark p-4 rounded-xl border border-gray-800 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Users className="text-brand-500 w-5 h-5" />
+                                        <span className="text-sm text-white font-bold uppercase">Open Organizer Applications</span>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" checked={siteSettings?.isOrgFormOpen} onChange={toggleOrgForm} className="sr-only peer" />
+                                        <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+                                    </label>
+                                </div>
+                                <p className="text-[10px] text-gray-500 uppercase font-bold">Toggle whether users can apply to become an organization from the contact page.</p>
+                                
+                                <div className="pt-4 border-t border-gray-800">
+                                    <label className="text-[10px] text-gray-500 uppercase font-black mb-2 block tracking-widest">Organizer Form Description</label>
+                                    <textarea 
+                                        value={orgFormDescription}
+                                        onChange={e => setOrgFormDescription(e.target.value)}
+                                        className="w-full bg-surface border border-gray-700 rounded-lg p-4 text-white focus:border-brand-500 outline-none h-32 text-sm"
+                                        placeholder="Explain the requirements for becoming an organizer..."
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1499,12 +2495,26 @@ const AdminPanel: React.FC = () => {
             )}
             </div>
 
+            {/* Tournament Edit Modal */}
+            <TournamentCreateModal 
+                isOpen={isTournamentModalOpen}
+                onClose={() => {
+                    setIsTournamentModalOpen(false);
+                    setSelectedTournament(null);
+                }}
+                onSuccess={() => {
+                    // Refresh tournaments
+                    if (selectedOrgId) fetchOrgTournaments(selectedOrgId);
+                }}
+                editTournament={selectedTournament}
+            />
+
             <ConfirmModal
                 isOpen={confirmModal.isOpen}
                 title={confirmModal.title}
                 message={confirmModal.message}
                 onConfirm={confirmModal.onConfirm}
-                onCancel={closeConfirmModal}
+                onClose={closeConfirmModal}
                 isDestructive={confirmModal.isDestructive}
             />
         </div>

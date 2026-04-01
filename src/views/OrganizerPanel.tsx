@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, orderBy, doc, updateDoc, getDoc } fr
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Tournament, Participant } from '../types';
-import { Plus, Settings, Play, Save, Upload, Trophy, Users, DollarSign, Calendar, LayoutDashboard, Search, Filter, Trash2, Eye, Map as MapIcon, Gamepad, ChevronRight } from 'lucide-react';
+import { Plus, Settings, Play, Save, Upload, Trophy, Users, DollarSign, Calendar, LayoutDashboard, Search, Filter, Trash2, Eye, Map as MapIcon, Gamepad, ChevronRight, Edit } from 'lucide-react';
 import Modal from '../components/Modal';
 import { NotificationService } from '../services/NotificationService';
 import { useNotification } from '../context/NotificationContext';
@@ -325,6 +325,16 @@ const OrganizerPanel: React.FC = () => {
                                             </div>
                                             <div className="flex gap-3">
                                                 <button 
+                                                    onClick={() => {
+                                                        setSelectedTournament(t);
+                                                        setIsCreateModalOpen(true);
+                                                    }}
+                                                    className="bg-blue-600/10 hover:bg-blue-600 text-blue-500 hover:text-white p-3 rounded-2xl transition-all border border-blue-500/20 active:scale-95"
+                                                    title="Edit Tournament"
+                                                >
+                                                    <Edit className="w-4 h-4" />
+                                                </button>
+                                                <button 
                                                     onClick={() => handleManage(t)} 
                                                     className="bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl text-xs font-black flex items-center gap-2 transition-all hover:shadow-[0_0_20px_rgba(var(--brand-primary-rgb),0.4)] active:scale-95 uppercase tracking-widest"
                                                 >
@@ -573,11 +583,15 @@ const OrganizerPanel: React.FC = () => {
                 </div>
             </Modal>
 
-            {/* Create Modal */}
+            {/* Create/Edit Modal */}
             <TournamentCreateModal 
                 isOpen={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
+                onClose={() => {
+                    setIsCreateModalOpen(false);
+                    setSelectedTournament(null);
+                }}
                 onSuccess={fetchHosted}
+                editTournament={selectedTournament}
             />
 
             {/* Result Modal */}

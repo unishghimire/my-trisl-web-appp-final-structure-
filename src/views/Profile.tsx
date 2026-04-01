@@ -11,9 +11,10 @@ import ConfirmModal from '../components/ConfirmModal';
 import Modal from '../components/Modal';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
 import { DEFAULT_AVATAR, NEXPLAY_LOGO, PRESET_AVATARS, PRESET_PLAYER_BANNERS } from '../constants';
-import { User, Mail, Phone, Shield, Trophy, Wallet as WalletIcon, Camera, Save, Info, Briefcase, Users, Hash, Clock, ArrowDown, ArrowUp, Copy, CheckCircle2, Image as ImageIcon, Settings as SettingsIcon } from 'lucide-react';
-import { Transaction } from '../types';
+import { User, Mail, Phone, Shield, Trophy, Wallet as WalletIcon, Camera, Save, Info, Briefcase, Users, Hash, Clock, ArrowDown, ArrowUp, Copy, CheckCircle2, Image as ImageIcon, Settings as SettingsIcon, X } from 'lucide-react';
+import { Transaction, SiteSettings } from '../types';
 import imageCompression from 'browser-image-compression';
+import { getDoc } from 'firebase/firestore';
 
 const Profile: React.FC = () => {
     const { user, profile } = useAuth();
@@ -32,7 +33,13 @@ const Profile: React.FC = () => {
     const [skills, setSkills] = useState<string>(profile?.skills?.join(', ') || '');
     const [status, setStatus] = useState<'online' | 'idle' | 'dnd' | 'offline'>(profile?.status || 'online');
     const [customActivity, setCustomActivity] = useState(profile?.customActivity || '');
-    const [orgName, setOrgName] = useState('');
+    const [orgName, setOrgName] = useState(profile?.orgName || '');
+    const [orgWhatsapp, setOrgWhatsapp] = useState(profile?.whatsapp || '');
+    const [orgDiscord, setOrgDiscord] = useState(profile?.discord || '');
+    const [orgYoutube, setOrgYoutube] = useState(profile?.youtube || '');
+    const [orgEmail, setOrgEmail] = useState(profile?.email || '');
+    const [orgProofLink, setOrgProofLink] = useState('');
+    const [isApplying, setIsApplying] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [copiedId, setCopiedId] = useState(false);
     const [followerCount, setFollowerCount] = useState(0);
@@ -43,6 +50,7 @@ const Profile: React.FC = () => {
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [newEmail, setNewEmail] = useState('');
     const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+    const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
 
     const { handlePaste, handleDrop, handleDragOver } = useInvisibleImage({
         folder: `profiles/${user?.uid}`,
@@ -72,6 +80,20 @@ const Profile: React.FC = () => {
     });
 
     const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const snap = await getDoc(doc(db, 'settings', 'site'));
+                if (snap.exists()) {
+                    setSiteSettings(snap.data() as SiteSettings);
+                }
+            } catch (error) {
+                console.error("Error fetching settings:", error);
+            }
+        };
+        fetchSettings();
+    }, []);
 
     useEffect(() => {
         if (user) {
@@ -134,35 +156,46 @@ const Profile: React.FC = () => {
 
         setIsSaving(true);
         try {
+            const updateData: any = {
+                inGameId: inGameId.trim(),
+                inGameName: inGameName.trim(),
+                teamName: teamName.trim(),
+                phone: phone.trim(),
+                bio: bio.trim(),
+                skills: skills.split(',').map(s => s.trim()).filter(s => s),
+                status: status,
+                customActivity: customActivity.trim(),
+                updatedAt: serverTimestamp()
+            };
+
+            if (profile?.role === 'organizer') {
+                updateData.orgName = orgName.trim();
+                updateData.whatsapp = orgWhatsapp.trim();
+                updateData.discord = orgDiscord.trim();
+                updateData.youtube = orgYoutube.trim();
+            }
+
             const batch = writeBatch(db);
             const userRef = doc(db, 'users', user.uid);
             const publicRef = doc(db, 'users_public', user.uid);
 
-            batch.update(userRef, {
-                inGameId: inGameId,
-                inGameName: inGameName,
-                teamName: teamName,
-                phone: phone,
-                bio: bio,
-                skills: skills.split(',').map(s => s.trim()).filter(s => s),
-                status: status,
-                customActivity: customActivity,
-                updatedAt: serverTimestamp()
-            });
+            batch.update(userRef, updateData);
 
             batch.set(publicRef, {
-                inGameId: inGameId,
-                inGameName: inGameName,
+                inGameId: inGameId.trim(),
+                inGameName: inGameName.trim(),
                 username: profile.username,
                 profilePicUrl: profile.profilePicUrl || '',
                 skills: skills.split(',').map(s => s.trim()).filter(s => s),
                 status: status,
-                customActivity: customActivity,
+                customActivity: customActivity.trim(),
+                orgName: profile?.role === 'organizer' ? orgName.trim() : undefined,
                 updatedAt: serverTimestamp()
             }, { merge: true });
 
             await batch.commit();
             showToast('Profile updated!', 'success');
+            setShowSettingsModal(false);
         } catch (error) {
             console.error("Error updating profile:", error);
             showToast('Error saving profile', 'error');
@@ -172,16 +205,45 @@ const Profile: React.FC = () => {
     };
 
     const handleOrgApply = async () => {
-        if (!user || !orgName) return;
+        if (!user || !orgName || !orgWhatsapp || !orgEmail || !orgProofLink) {
+            return showToast('Please fill all fields', 'error');
+        }
+        
+        setIsApplying(true);
         try {
-            await updateDoc(doc(db, 'users', user.uid), {
-                orgStatus: 'pending',
-                orgName: orgName
+            const batch = writeBatch(db);
+            
+            // 1. Create Application Record
+            const appRef = doc(collection(db, 'orgApplications'));
+            batch.set(appRef, {
+                userId: user.uid,
+                username: profile?.username || 'User',
+                name: profile?.username || 'User',
+                orgName: orgName,
+                whatsapp: orgWhatsapp,
+                email: orgEmail,
+                proofLink: orgProofLink,
+                status: 'pending',
+                timestamp: serverTimestamp()
             });
+
+            // 2. Update User Status
+            batch.update(doc(db, 'users', user.uid), {
+                orgStatus: 'pending'
+            });
+
+            await batch.commit();
             showToast('Application sent! Admin will review your request.', 'success');
+            
+            // Reset form
+            setOrgName('');
+            setOrgWhatsapp('');
+            setOrgProofLink('');
         } catch (error) {
             console.error("Error applying for organizer:", error);
             showToast('Failed to send application', 'error');
+        } finally {
+            setIsApplying(false);
         }
     };
 
@@ -543,6 +605,58 @@ const Profile: React.FC = () => {
                                         className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
                                     />
                                 </div>
+                                {profile?.role === 'organizer' && (
+                                    <>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                                <Briefcase className="w-3 h-3" /> Organization Name
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                value={orgName} 
+                                                onChange={(e) => setOrgName(e.target.value)}
+                                                placeholder="Enter Org Name" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                                <Phone className="w-3 h-3" /> WhatsApp
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                value={orgWhatsapp} 
+                                                onChange={(e) => setOrgWhatsapp(e.target.value)}
+                                                placeholder="WhatsApp Number" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                                Discord
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                value={orgDiscord} 
+                                                onChange={(e) => setOrgDiscord(e.target.value)}
+                                                placeholder="Discord Username" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                                YouTube
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                value={orgYoutube} 
+                                                onChange={(e) => setOrgYoutube(e.target.value)}
+                                                placeholder="YouTube Channel Link" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
+                                            />
+                                        </div>
+                                    </>
+                                )}
                                 <div>
                                     <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                         <Phone className="w-3 h-3" /> Phone Number
@@ -688,7 +802,7 @@ const Profile: React.FC = () => {
                     </div>
 
                     {/* Organizer Application */}
-                    {profile.role === 'player' && !profile.orgStatus && (
+                    {profile.role === 'player' && (profile.orgStatus === 'pending' || profile.orgStatus === 'rejected' || !profile.orgStatus) && siteSettings?.isOrgFormOpen && (
                         <div className="pt-8 border-t border-gray-800">
                             <div className="bg-brand-500/5 p-6 rounded-2xl border border-brand-500/20">
                                 <div className="flex items-center gap-3 mb-4">
@@ -696,21 +810,68 @@ const Profile: React.FC = () => {
                                     <h4 className="font-black text-white uppercase tracking-widest text-sm">Become an Organizer</h4>
                                 </div>
                                 <p className="text-xs text-gray-400 mb-6 leading-relaxed">
-                                    Want to host your own tournaments and manage teams? Apply for an organizer account. Our team will review your application within 48 hours.
+                                    {siteSettings.orgFormDescription || "Want to host your own tournaments and manage teams? Apply for an organizer account. Our team will review your application within 48 hours."}
                                 </p>
-                                <div className="flex gap-3">
-                                    <input 
-                                        type="text" 
-                                        value={orgName}
-                                        onChange={(e) => setOrgName(e.target.value)}
-                                        placeholder="Organization / Brand Name" 
-                                        className="bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white flex-grow text-sm focus:border-brand-500 outline-none transition font-bold"
-                                    />
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black mb-1 block ml-1">Organization Name</label>
+                                            <input 
+                                                type="text" 
+                                                value={orgName}
+                                                onChange={(e) => setOrgName(e.target.value)}
+                                                placeholder="Organization / Brand Name" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 outline-none transition font-bold"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black mb-1 block ml-1">Contact Email</label>
+                                            <input 
+                                                type="email" 
+                                                value={orgEmail}
+                                                onChange={(e) => setOrgEmail(e.target.value)}
+                                                placeholder="Business Email" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 outline-none transition font-bold"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black mb-1 block ml-1">WhatsApp Number</label>
+                                            <input 
+                                                type="text" 
+                                                value={orgWhatsapp}
+                                                onChange={(e) => setOrgWhatsapp(e.target.value)}
+                                                placeholder="+1234567890" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 outline-none transition font-bold"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 uppercase font-black mb-1 block ml-1">Portfolio / Proof Link</label>
+                                            <input 
+                                                type="url" 
+                                                value={orgProofLink}
+                                                onChange={(e) => setOrgProofLink(e.target.value)}
+                                                placeholder="Link to previous work/socials" 
+                                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 outline-none transition font-bold"
+                                            />
+                                        </div>
+                                    </div>
                                     <button 
                                         onClick={handleOrgApply} 
-                                        className="bg-brand-600 px-6 rounded-xl hover:bg-brand-500 text-white text-xs font-black transition uppercase tracking-widest shadow-lg"
+                                        disabled={isApplying}
+                                        className="w-full bg-brand-600 py-4 rounded-xl hover:bg-brand-500 text-white text-xs font-black transition uppercase tracking-widest shadow-lg shadow-brand-600/20 flex items-center justify-center gap-2"
                                     >
-                                        Apply
+                                        {isApplying ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                Submitting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Briefcase className="w-4 h-4" /> Submit Application
+                                            </>
+                                        )}
                                     </button>
                                 </div>
                             </div>
@@ -720,6 +881,22 @@ const Profile: React.FC = () => {
                         <div className="mt-8 p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-xl text-center text-yellow-500 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
                             <Info className="w-4 h-4" /> Application Pending Review
                         </div>
+                    )}
+                    {profile.orgStatus === 'rejected' && (
+                        <div className="mt-8 p-4 bg-red-900/20 border border-red-500/30 rounded-xl text-center text-red-500 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                            <X className="w-4 h-4" /> Application Rejected. You can apply again later.
+                        </div>
+                    )}
+                    {profile.orgStatus === 'rejected' && siteSettings?.isOrgFormOpen && (
+                        <button 
+                            onClick={() => {
+                                // Reset application state to allow re-applying
+                                updateDoc(doc(db, 'users', user.uid), { orgStatus: null });
+                            }}
+                            className="w-full mt-4 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-bold transition uppercase text-xs tracking-widest"
+                        >
+                            Re-apply as Organizer
+                        </button>
                     )}
                 </div>
             </Modal>

@@ -77,9 +77,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     });
                     
                     setUser({ uid: newUser.uid, email: newUser.email, username: newUser.username, role: newUser.role });
+                    setProfile(newUser as UserProfile);
                 } else {
-                    const data = userSnap.data();
+                    const data = userSnap.data() as UserProfile;
                     setUser({ uid: data.uid, email: data.email, username: data.username, role: data.role || 'player' });
+                    setProfile(data);
                 }
             } else {
                 setUser(null);

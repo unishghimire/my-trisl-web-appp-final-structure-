@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, runTransaction, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Tournament, UserProfile } from '../types';
 import { DEFAULT_BANNER } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency, formatDate, getYoutubeId } from '../utils';
-import { Clock, Users, Trophy, Lock, Eye, Play, Share2, Calendar, MapPin, Info, Medal, ExternalLink, ChevronRight, AlertCircle, CheckCircle2, Search, Filter } from 'lucide-react';
+import { Clock, Users, Trophy, Lock, Eye, EyeOff, Play, Share2, Calendar, MapPin, Info, Medal, ExternalLink, ChevronRight, AlertCircle, CheckCircle2, Search, Filter, Building2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
 import { NotificationService } from '../services/NotificationService';
@@ -21,7 +21,7 @@ const TournamentDetails: React.FC = () => {
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [isJoined, setIsJoined] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'rules' | 'participants' | 'results'>(
+    const [activeTab, setActiveTab] = useState<'overview' | 'description' | 'participants' | 'results'>(
         (searchParams.get('tab') as any) || 'overview'
     );
     const [participants, setParticipants] = useState<any[]>([]);
@@ -33,6 +33,7 @@ const TournamentDetails: React.FC = () => {
     const [teammate2, setTeammate2] = useState('');
     const [teammate3, setTeammate3] = useState('');
     const [teamMembers, setTeamMembers] = useState<any[]>([]);
+    const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
         const fetchTeamMembers = async () => {
@@ -368,7 +369,7 @@ const TournamentDetails: React.FC = () => {
                     <div className="flex p-1 bg-surface rounded-2xl border border-gray-800 sticky top-4 z-10 backdrop-blur-xl">
                         {[
                             { id: 'overview', label: 'Overview', icon: Info },
-                            { id: 'rules', label: 'Rules', icon: Lock },
+                            { id: 'description', label: 'Description', icon: Info },
                             { id: 'participants', label: 'Players', icon: Users },
                             { id: 'results', label: 'Results', icon: Trophy },
                         ].map((tab) => (
@@ -447,13 +448,18 @@ const TournamentDetails: React.FC = () => {
                                             <div className="bg-black/40 p-4 rounded-2xl border border-white/5">
                                                 <div className="text-[10px] text-gray-500 uppercase font-black mb-1">Password</div>
                                                 <div className="text-white font-mono text-xl flex justify-between items-center">
-                                                    {tournament.roomPass || '---'}
-                                                    <button onClick={() => {
-                                                        navigator.clipboard.writeText(tournament.roomPass || '');
-                                                        showToast("Copied!", "success");
-                                                    }} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                                                        <ExternalLink className="w-4 h-4 text-gray-500" />
-                                                    </button>
+                                                    {showPassword ? (tournament.roomPass || '---') : '••••••'}
+                                                    <div className="flex items-center">
+                                                        <button onClick={() => setShowPassword(!showPassword)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                                            {showPassword ? <EyeOff className="w-4 h-4 text-gray-500" /> : <Eye className="w-4 h-4 text-gray-500" />}
+                                                        </button>
+                                                        <button onClick={() => {
+                                                            navigator.clipboard.writeText(tournament.roomPass || '');
+                                                            showToast("Copied!", "success");
+                                                        }} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                                            <ExternalLink className="w-4 h-4 text-gray-500" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -462,20 +468,43 @@ const TournamentDetails: React.FC = () => {
                             </motion.div>
                         )}
 
-                        {activeTab === 'rules' && (
+                        {activeTab === 'description' && (
                             <motion.div 
-                                key="rules"
+                                key="description"
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -10 }}
-                                className="bg-surface p-8 rounded-3xl border border-gray-800"
+                                className="space-y-8"
                             >
-                                <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
-                                    <Lock className="w-6 h-6 text-brand-500" /> Rules & Regulations
-                                </h3>
-                                <div className="prose prose-invert max-w-none">
-                                    <div className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap font-medium">
-                                        {tournament.rules || 'No specific rules provided. Play fair and respect other players.'}
+                                <div className="bg-surface p-8 rounded-3xl border border-gray-800">
+                                    <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
+                                        <Building2 className="w-6 h-6 text-brand-500" /> Organization
+                                    </h3>
+                                    <Link to={`/profile/${tournament.hostUid}`} className="text-brand-400 font-bold hover:underline">
+                                        {tournament.hostName || 'Official Host'}
+                                    </Link>
+                                </div>
+                                <div className="bg-surface p-8 rounded-3xl border border-gray-800">
+                                    <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
+                                        <Medal className="w-6 h-6 text-brand-500" /> Prize Distribution
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {tournament.prizeDistribution?.map((p, i) => (
+                                            <div key={i} className="flex justify-between items-center p-3 bg-dark rounded-xl border border-gray-800/50">
+                                                <span className="text-sm text-gray-400 font-bold">Rank {p.rank}</span>
+                                                <span className="text-sm font-black text-brand-400">{formatCurrency(p.amount)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="bg-surface p-8 rounded-3xl border border-gray-800">
+                                    <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
+                                        <Lock className="w-6 h-6 text-brand-500" /> Rules & Regulations
+                                    </h3>
+                                    <div className="prose prose-invert max-w-none">
+                                        <div className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap font-medium">
+                                            {tournament.rules || 'No specific rules provided. Play fair and respect other players.'}
+                                        </div>
                                     </div>
                                 </div>
                             </motion.div>
@@ -747,32 +776,6 @@ const TournamentDetails: React.FC = () => {
                                 Join Tournament <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </button>
                         )}
-                    </div>
-
-                    {/* Prize Pool Breakdown */}
-                    <div className="bg-surface p-6 rounded-3xl border border-gray-800">
-                        <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <Medal className="w-4 h-4 text-yellow-500" /> Prize Distribution
-                        </h4>
-                        <div className="space-y-3">
-                            {tournament.prizeDistribution?.map((p, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 bg-dark rounded-xl border border-gray-800/50">
-                                    <span className="text-xs text-gray-400 font-bold">Rank {p.rank}</span>
-                                    <span className="text-sm font-black text-brand-400">{formatCurrency(p.amount)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Organizer Info */}
-                    <div className="bg-surface p-6 rounded-3xl border border-gray-800 flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gray-800 rounded-2xl flex items-center justify-center text-gray-500">
-                            <Users className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Organizer</div>
-                            <div className="text-white font-black uppercase tracking-tighter">Official Host</div>
-                        </div>
                     </div>
                 </div>
             </div>

@@ -15,6 +15,11 @@ export interface UserProfile {
     isBanned: boolean;
     createdAt: Timestamp | any;
     orgStatus?: 'pending' | 'approved' | 'rejected';
+    orgName?: string;
+    isOrganizer?: boolean;
+    discord?: string;
+    youtube?: string;
+    whatsapp?: string;
     bio?: string;
     profilePicUrl?: string;
     bannerUrl?: string;
@@ -23,6 +28,11 @@ export interface UserProfile {
     status?: 'online' | 'idle' | 'dnd' | 'offline';
     customActivity?: string;
     lastActive?: Timestamp | any;
+    stats?: {
+        totalMatches: number;
+        wins: number;
+        losses: number;
+    };
 }
 
 export interface Tournament {
@@ -41,8 +51,9 @@ export interface Tournament {
     map?: string;
     startTime: Timestamp | any;
     rules?: string;
-    status: 'upcoming' | 'live' | 'completed';
+    status: 'upcoming' | 'live' | 'completed' | 'cancelled';
     hostUid: string;
+    hostName?: string; // Organization Name
     createdAt: Timestamp | any;
     prizeDistribution?: { rank: number; amount: number }[];
     roomId?: string;
@@ -57,16 +68,21 @@ export interface Tournament {
 export interface Transaction {
     id: string;
     userId: string;
-    type: 'deposit' | 'withdrawal' | 'prize';
+    username?: string;
+    userEmail?: string;
+    type: 'deposit' | 'withdrawal' | 'prize' | 'refund' | 'entry_fee';
     amount: number;
     method: string;
     refId: string;
-    status: 'pending' | 'success' | 'rejected';
+    status: 'pending' | 'success' | 'rejected' | 'refunded';
     timestamp: Timestamp | any;
     desc?: string;
     proofUrl?: string;
     rejectionReason?: string;
     accountDetails?: string;
+    confirmedBy?: string;
+    confirmedByUsername?: string;
+    tournamentId?: string;
 }
 
 export interface PaymentMethod {
@@ -163,6 +179,8 @@ export interface SiteSettings {
     supportPhone: string;
     notice: string;
     isNoticeActive: boolean;
+    isOrgFormOpen: boolean;
+    orgFormDescription?: string;
     updatedAt: Timestamp | any;
 }
 
@@ -186,4 +204,17 @@ export interface Media {
     fileSize: number;
     mimeType: string;
     createdAt: Timestamp | any;
+}
+
+export interface OrgApplication {
+    id: string;
+    userId: string;
+    username: string;
+    name: string;
+    orgName: string;
+    whatsapp: string;
+    email: string;
+    proofLink: string;
+    status: 'pending' | 'approved' | 'rejected';
+    timestamp: Timestamp | any;
 }

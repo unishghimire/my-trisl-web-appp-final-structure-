@@ -21,7 +21,10 @@ import Contact from './views/Contact';
 import Privacy from './views/Privacy';
 import Teams from './views/Teams';
 import TeamDetails from './views/TeamDetails';
+import OrgBrowser from './views/OrgBrowser';
 import PublicProfile from './views/PublicProfile';
+import ProfileCompletionGuard from './components/ProfileCompletionGuard';
+import CompleteProfile from './views/CompleteProfile';
 import Toast, { ToastType } from './components/Toast';
 import GamesBrowser from './views/GamesBrowser';
 import GameModesBrowser from './views/GameModesBrowser';
@@ -50,27 +53,31 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
             <BackButton />
           </div>
         )}
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/tournaments" element={<Tournaments />} />
-          <Route path="/games" element={<GamesBrowser />} />
-          <Route path="/games/:id" element={<GameModesBrowser />} />
-          <Route path="/details/:id" element={<TournamentDetails />} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/user/:id" element={<PublicProfile />} />
-          <Route path="/teams" element={<Teams />} />
-          <Route path="/team/:id" element={<TeamDetails />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminPanel /></ProtectedRoute>} />
-          <Route path="/organizer" element={<ProtectedRoute allowedRoles={['organizer', 'admin']}><OrganizerPanel /></ProtectedRoute>} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/privacy" element={<Privacy />} />
-        </Routes>
+        <ProfileCompletionGuard>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/tournaments" element={<Tournaments />} />
+            <Route path="/games" element={<GamesBrowser />} />
+            <Route path="/games/:id" element={<GameModesBrowser />} />
+            <Route path="/details/:id" element={<TournamentDetails />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfile /></ProtectedRoute>} />
+            <Route path="/user/:id" element={<PublicProfile />} />
+            <Route path="/organizations" element={<OrgBrowser />} />
+            <Route path="/teams" element={<Teams />} />
+            <Route path="/team/:id" element={<TeamDetails />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminPanel /></ProtectedRoute>} />
+            <Route path="/organizer" element={<ProtectedRoute allowedRoles={['organizer', 'admin']}><OrganizerPanel /></ProtectedRoute>} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/privacy" element={<Privacy />} />
+          </Routes>
+        </ProfileCompletionGuard>
       </main>
       <Footer />
       <div id="toast-container" className="fixed bottom-5 right-5 z-[100] pointer-events-none">

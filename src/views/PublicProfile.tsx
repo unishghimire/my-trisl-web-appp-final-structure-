@@ -3,8 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { UserProfile, Team } from '../types';
-import { Shield, Trophy, Briefcase, Users, ArrowLeft, CheckCircle2, Copy, UserPlus, UserMinus } from 'lucide-react';
+import { UserProfile, Team, Tournament } from '../types';
+import { Shield, Trophy, Briefcase, Users, ArrowLeft, CheckCircle2, Copy, UserPlus, UserMinus, Calendar, Share2, Eye } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
 
 const PublicProfile: React.FC = () => {
@@ -14,6 +14,7 @@ const PublicProfile: React.FC = () => {
     
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [teams, setTeams] = useState<Team[]>([]);
+    const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [loading, setLoading] = useState(true);
     const [copiedId, setCopiedId] = useState(false);
     const [isFollowing, setIsFollowing] = useState(false);
@@ -27,8 +28,20 @@ const PublicProfile: React.FC = () => {
         if (id) {
             fetchProfileData();
             fetchStats();
+            fetchTournaments();
         }
     }, [id]);
+
+    const fetchTournaments = async () => {
+        if (!id) return;
+        try {
+            const q = query(collection(db, 'tournaments'), where('hostUid', '==', id));
+            const snap = await getDocs(q);
+            setTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
+        } catch (error) {
+            console.error("Error fetching tournaments:", error);
+        }
+    };
 
     const fetchStats = async () => {
         if (!id) return;
@@ -234,7 +247,7 @@ const PublicProfile: React.FC = () => {
                                         <div><span className="text-white">{followingCount}</span> Following</div>
                                     </div>
                                 </div>
-                                {user && user.uid !== id && (
+                                {user && user.uid !== id && profile.role === 'organizer' && (
                                     <button 
                                         onClick={handleToggleFollow}
                                         disabled={followLoading}
@@ -308,6 +321,54 @@ const PublicProfile: React.FC = () => {
                             <p className="text-gray-500 text-sm">Not a member of any teams yet.</p>
                         )}
                     </div>
+
+                    {/* Tournaments Hosted */}
+                    {profile.role === 'organizer' && (
+                        <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
+                            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 border-b border-gray-800 pb-2 flex items-center gap-2">
+                                <Calendar className="w-5 h-5 text-brand-500" /> Tournaments
+                            </h3>
+                            {tournaments.length > 0 ? (
+                                <div className="space-y-4">
+                                    {tournaments.map(t => (
+                                        <div key={t.id} className="bg-dark p-5 rounded-xl border border-gray-700 shadow-lg relative overflow-hidden group">
+                                            <div className="relative z-10">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                            <span className="bg-gray-800 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-700">{t.game}</span>
+                                                            <span className="bg-brand-600/20 text-brand-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-brand-500/20 uppercase">{t.teamType}</span>
+                                                            <span className="bg-blue-600/20 text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-500/20 uppercase">{t.type}</span>
+                                                        </div>
+                                                        <h4 className="font-black text-white text-sm group-hover:text-brand-400 transition cursor-pointer" onClick={() => window.location.href = `/details/${t.id}`}>
+                                                            {t.title}
+                                                        </h4>
+                                                        <div className="text-xs text-gray-400 mt-1">{new Date(t.startTime.seconds * 1000).toLocaleDateString()}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-brand-400 font-bold text-sm">Rs. {t.prizePool}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-4 flex gap-3 text-sm border-t border-gray-700 pt-3">
+                                                    <Link to={`/details/${t.id}`} className="text-gray-300 hover:text-white flex items-center gap-1">
+                                                        <Eye className="w-4 h-4" /> Details
+                                                    </Link>
+                                                    <button onClick={() => {
+                                                        navigator.clipboard.writeText(`${window.location.origin}/details/${t.id}`);
+                                                        showToast('Tournament link copied to clipboard', 'success');
+                                                    }} className="text-gray-300 hover:text-white flex items-center gap-1">
+                                                        <Share2 className="w-4 h-4" /> Share
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 text-sm">No tournaments hosted yet.</p>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-6">

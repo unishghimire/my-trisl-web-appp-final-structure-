@@ -52,8 +52,6 @@ const Navbar: React.FC = () => {
     const navLinks = [
         { name: 'Home', path: '/' },
         { name: 'Games', path: '/games' },
-        { name: 'Leaderboard', path: '/leaderboard' },
-        { name: 'Dashboard', path: '/dashboard' },
     ];
 
     if (user) {
@@ -73,8 +71,8 @@ const Navbar: React.FC = () => {
                 <div className="flex items-center justify-between h-16">
                     {/* Left Section: Logo */}
                     <div className="flex items-center cursor-pointer group" onClick={() => navigate('/')}>
-                        <img src="https://github.com/unishghimire/nexplay-logo/blob/main/nexplay.jpg?raw=true" alt="Nexplay Logo" className="w-9 h-9 rounded-md mr-2" />
-                        <span className="text-xl font-bold tracking-wider text-white">NEX<span className="text-brand-500">PLAY</span></span>
+                        <img src="https://github.com/unishghimire/nexplay-logo/blob/main/nexplay.jpg?raw=true" alt="Nexplay Logo" className="w-8 h-8 sm:w-9 sm:h-9 rounded-md mr-2" />
+                        <span className="text-lg sm:text-xl font-bold tracking-wider text-white">NEX<span className="text-brand-500">PLAY</span></span>
                     </div>
 
                     {/* Center Section: Navigation */}
@@ -140,7 +138,7 @@ const Navbar: React.FC = () => {
                     </div>
 
                     {/* Mobile Menu Toggle */}
-                    <div className="lg:hidden flex items-center gap-2">
+                    <div className="lg:hidden flex items-center gap-1">
                         {user && <WalletDisplay balance={profile?.balance || 0} />}
                         {user && <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />}
                         <button onClick={toggleMobileMenu} className="text-gray-400 hover:text-white p-1 rounded-md focus:outline-none">

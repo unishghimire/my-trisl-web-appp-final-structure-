@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, serverTimestamp, Timestamp, updateDoc, doc, writeBatch, where, query } from 'firebase/firestore';
+import { Tournament } from '../types';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -27,6 +28,7 @@ interface TournamentCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  editTournament?: Tournament | null;
 }
 
 const STEPS = [
@@ -37,8 +39,8 @@ const STEPS = [
   { id: 5, title: 'Review', icon: CheckCircle2, description: 'Final check' },
 ];
 
-const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const { user } = useAuth();
+const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, onClose, onSuccess, editTournament }) => {
+  const { user, profile } = useAuth();
   const { showToast } = useNotification();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -80,6 +82,47 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
     };
     fetchGames();
   }, []);
+
+  useEffect(() => {
+    if (editTournament) {
+      setFormData({
+        title: editTournament.title,
+        game: editTournament.game,
+        bannerUrl: editTournament.bannerUrl || '',
+        type: editTournament.type,
+        map: editTournament.map || '',
+        teamType: editTournament.teamType as any,
+        teamSize: editTournament.teamSize,
+        slots: editTournament.slots,
+        prizePool: editTournament.prizePool,
+        entryFee: editTournament.entryFee,
+        startTime: editTournament.startTime instanceof Timestamp 
+          ? new Date(editTournament.startTime.toDate().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+          : new Date(new Date(editTournament.startTime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+        rules: editTournament.rules,
+        prizeDistribution: editTournament.prizeDistribution || [{ rank: 1, amount: 0 }]
+      });
+      setCurrentStep(1);
+    } else {
+      setFormData({
+        title: '',
+        game: '',
+        bannerUrl: '',
+        type: 'Battle Royale',
+        map: '',
+        teamType: 'solo',
+        teamSize: 1,
+        slots: 100,
+        prizePool: 0,
+        entryFee: 0,
+        startTime: '',
+        rules: '',
+        prizeDistribution: [
+          { rank: 1, amount: 0 },
+        ]
+      });
+    }
+  }, [editTournament, isOpen]);
 
   const validateStep = () => {
     switch (currentStep) {
@@ -133,40 +176,69 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
     try {
       const tournamentData = {
         ...formData,
-        hostUid: user.uid,
-        currentPlayers: 0,
-        status: 'upcoming',
-        createdAt: serverTimestamp(),
+        hostUid: editTournament ? editTournament.hostUid : user.uid,
+        currentPlayers: editTournament ? editTournament.currentPlayers : 0,
+        status: editTournament ? editTournament.status : 'upcoming',
+        updatedAt: serverTimestamp(),
         startTime: Timestamp.fromDate(new Date(formData.startTime)),
-        isFeatured: false,
+        isFeatured: editTournament ? editTournament.isFeatured : false,
       };
 
-      await addDoc(collection(db, 'tournaments'), tournamentData);
-      showToast('Tournament created successfully!', 'success');
+      if (editTournament) {
+        await updateDoc(doc(db, 'tournaments', editTournament.id), tournamentData);
+        showToast('Tournament updated successfully!', 'success');
+      } else {
+        const docRef = await addDoc(collection(db, 'tournaments'), {
+          ...tournamentData,
+          createdAt: serverTimestamp()
+        });
+        showToast('Tournament created successfully!', 'success');
+
+        // Notify followers
+        const followsSnap = await getDocs(query(collection(db, 'follows'), where('followingId', '==', user.uid)));
+        const batch = writeBatch(db);
+        followsSnap.forEach(fDoc => {
+            const followerId = fDoc.data().followerId;
+            const notifRef = doc(collection(db, 'notifications'));
+            batch.set(notifRef, {
+                userId: followerId,
+                title: 'New Tournament!',
+                message: `${formData.title} has been created by ${profile?.username || 'an organizer'}`,
+                type: 'info',
+                read: false,
+                link: `/details/${docRef.id}`,
+                timestamp: serverTimestamp()
+            });
+        });
+        await batch.commit();
+      }
+      
       onSuccess();
       onClose();
       // Reset form
-      setFormData({
-        title: '',
-        game: '',
-        bannerUrl: '',
-        type: 'Battle Royale',
-        map: '',
-        teamType: 'solo',
-        teamSize: 1,
-        slots: 100,
-        prizePool: 0,
-        entryFee: 0,
-        startTime: '',
-        rules: '',
-        prizeDistribution: [
-          { rank: 1, amount: 0 },
-        ]
-      });
-      setCurrentStep(1);
+      if (!editTournament) {
+        setFormData({
+          title: '',
+          game: '',
+          bannerUrl: '',
+          type: 'Battle Royale',
+          map: '',
+          teamType: 'solo',
+          teamSize: 1,
+          slots: 100,
+          prizePool: 0,
+          entryFee: 0,
+          startTime: '',
+          rules: '',
+          prizeDistribution: [
+            { rank: 1, amount: 0 },
+          ]
+        });
+        setCurrentStep(1);
+      }
     } catch (error) {
-      console.error("Error creating tournament:", error);
-      showToast('Failed to create tournament', 'error');
+      console.error("Error saving tournament:", error);
+      showToast('Failed to save tournament', 'error');
     } finally {
       setLoading(false);
     }
@@ -529,7 +601,7 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
     <Modal 
       isOpen={isOpen} 
       onClose={onClose} 
-      title="Create New Tournament"
+      title={editTournament ? 'Edit Tournament' : 'Create New Tournament'}
       maxWidth="max-w-2xl"
     >
       <div className="mb-8">

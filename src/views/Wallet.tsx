@@ -10,7 +10,8 @@ import { ArrowDown, ArrowUp, Trophy, Gift, Plus, LogOut, QrCode, Info, CheckCirc
 const Wallet: React.FC = () => {
     const { user, profile } = useAuth();
     const { showToast } = useNotification();
-    const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw' | 'history'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw' | 'transactions'>('overview');
+    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
     const [settings, setSettings] = useState<SiteSettings | null>(null);
@@ -75,6 +76,8 @@ const Wallet: React.FC = () => {
             // 2. Create Transaction
             await addDoc(collection(db, 'transactions'), {
                 userId: user.uid,
+                username: profile?.username || 'Unknown',
+                userEmail: user.email || '',
                 type: 'deposit',
                 amount: amount,
                 method: selectedMethod.name,
@@ -85,7 +88,7 @@ const Wallet: React.FC = () => {
             });
 
             showToast('Deposit request submitted! Please wait for admin approval.', 'success');
-            setActiveTab('history');
+            setActiveTab('transactions');
             // Reset form
             setSelectedMethod(null);
             setDepositAmount('');
@@ -119,6 +122,8 @@ const Wallet: React.FC = () => {
             const txRef = doc(collection(db, 'transactions'));
             batch.set(txRef, {
                 userId: user.uid,
+                username: profile?.username || 'Unknown',
+                userEmail: user.email || '',
                 type: 'withdrawal',
                 amount: -amount,
                 method: withdrawMethod,
@@ -137,7 +142,7 @@ const Wallet: React.FC = () => {
             await batch.commit();
 
             showToast('Withdrawal request submitted! Please wait for admin approval.', 'success');
-            setActiveTab('history');
+            setActiveTab('transactions');
             // Reset form
             setWithdrawAmount('');
             setWithdrawMethod('');
@@ -174,13 +179,13 @@ const Wallet: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex border-b border-gray-800 mb-6 overflow-x-auto custom-scrollbar">
-                {(['overview', 'deposit', 'withdraw', 'history'] as const).map(tab => (
+                {(['overview', 'deposit', 'withdraw', 'transactions'] as const).map(tab => (
                     <button 
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         className={`px-6 py-3 font-bold text-sm transition whitespace-nowrap uppercase tracking-widest ${activeTab === tab ? 'text-brand-400 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}
                     >
-                        {tab}
+                        {tab === 'transactions' ? 'Transactions' : tab.replace('_', ' ')}
                     </button>
                 ))}
             </div>
@@ -213,7 +218,7 @@ const Wallet: React.FC = () => {
                     <div className="bg-card p-6 rounded-2xl border border-gray-800">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-bold text-white uppercase tracking-wider">Recent Activity</h3>
-                            <button onClick={() => setActiveTab('history')} className="text-brand-400 text-xs font-bold hover:underline">View All</button>
+                            <button onClick={() => setActiveTab('transactions')} className="text-brand-400 text-xs font-bold hover:underline">View All</button>
                         </div>
                         <div className="space-y-4">
                             {transactions.slice(0, 3).map(t => (
@@ -430,24 +435,41 @@ const Wallet: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'history' && (
+            {activeTab === 'transactions' && (
                 <div className="space-y-4">
-                    <h3 className="font-bold text-white uppercase tracking-wider mb-6 pl-1">Transaction History</h3>
+                    <h3 className="font-bold text-white uppercase tracking-wider mb-6 pl-1">
+                        Transaction History
+                    </h3>
                     <div className="space-y-3">
                         {transactions.length > 0 ? (
-                            transactions.map(t => (
-                                <div key={t.id} className="bg-card p-5 rounded-2xl border border-gray-800 hover:border-gray-700 transition space-y-4">
-                                    <div className="flex justify-between items-start">
+                            [...transactions]
+                                .sort((a, b) => {
+                                    if (a.status === 'pending' && b.status !== 'pending') return -1;
+                                    if (a.status !== 'pending' && b.status === 'pending') return 1;
+                                    return 0; // Keep original order (timestamp desc) for same status
+                                })
+                                .map(t => (
+                                <div 
+                                    key={t.id} 
+                                    onClick={() => setSelectedTransaction(t)}
+                                    className="bg-card p-5 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group relative overflow-hidden"
+                                >
+                                    {t.status === 'pending' && (
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500"></div>
+                                    )}
+                                    <div className="flex justify-between items-start relative z-10">
                                         <div className="flex items-center gap-4">
                                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${t.type === 'deposit' ? 'bg-green-900/20 border-green-500/30 text-green-400' : t.type === 'withdrawal' ? 'bg-red-900/20 border-red-500/30 text-red-400' : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-400'}`}>
                                                 {t.type === 'deposit' ? <ArrowDown className="w-6 h-6" /> : t.type === 'withdrawal' ? <ArrowUp className="w-6 h-6" /> : <Trophy className="w-6 h-6" />}
                                             </div>
                                             <div>
                                                 <div className="font-bold text-white capitalize flex items-center gap-2">
-                                                    {t.type}
-                                                    <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded text-gray-400 border border-gray-700 uppercase">{t.method}</span>
+                                                    {t.type.replace('_', ' ')}
+                                                    {t.status === 'pending' && (
+                                                        <span className="text-[8px] bg-yellow-500/10 px-2 py-0.5 rounded text-yellow-500 border border-yellow-500/20 uppercase font-black">Pending</span>
+                                                    )}
                                                 </div>
-                                                <div className="text-xs text-gray-500">{formatDate(t.timestamp)}</div>
+                                                <div className="text-xs text-gray-500">{formatDate(t.timestamp)} • {t.method || 'System'}</div>
                                             </div>
                                         </div>
                                         <div className="text-right">
@@ -459,39 +481,98 @@ const Wallet: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    {t.status === 'rejected' && t.rejectionReason && (
-                                        <div className="p-3 bg-red-900/10 border border-red-500/20 rounded-xl flex gap-3 items-start">
-                                            <Info className="text-red-500 shrink-0 w-4 h-4 mt-0.5" />
-                                            <div className="text-[10px] text-red-300">
-                                                <span className="font-bold uppercase block mb-1">Rejection Reason:</span>
-                                                {t.rejectionReason}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {t.accountDetails && (
-                                        <div className="p-3 bg-blue-900/10 border border-blue-500/20 rounded-xl flex gap-3 items-start">
-                                            <Info className="text-blue-500 shrink-0 w-4 h-4 mt-0.5" />
-                                            <div className="text-[10px] text-blue-300">
-                                                <span className="font-bold uppercase block mb-1">Details:</span>
-                                                <span className="whitespace-pre-wrap">{t.accountDetails}</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="text-[10px] text-gray-600 font-mono flex justify-between items-center border-t border-gray-800 pt-3">
-                                        <span>REF: {t.refId}</span>
-                                        {t.proofUrl && <a href={t.proofUrl} target="_blank" rel="noreferrer" className="text-brand-400 hover:underline flex items-center gap-1"><Eye className="w-3 h-3" /> View Proof</a>}
+                                    <div className="mt-3 flex justify-end">
+                                        <span className="text-[10px] text-brand-400 font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition">Click for details</span>
                                     </div>
                                 </div>
                             ))
                         ) : (
                             <div className="text-center py-20 bg-card rounded-2xl border border-gray-800">
                                 <Trophy className="mx-auto text-gray-700 w-12 h-12 mb-4" />
-                                <p className="text-gray-500 font-bold uppercase tracking-widest text-sm">No transactions yet</p>
+                                <p className="text-gray-500 font-bold uppercase tracking-widest text-sm">No transactions found</p>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Transaction Details Modal */}
+            {selectedTransaction && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-gray-900 border border-gray-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-scale-in">
+                        <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-gradient-to-r from-gray-900 to-black">
+                            <h3 className="font-black text-white uppercase tracking-widest">Transaction Details</h3>
+                            <button onClick={() => setSelectedTransaction(null)} className="p-2 hover:bg-gray-800 rounded-full transition">
+                                <X className="w-5 h-5 text-gray-400" />
+                            </button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="flex flex-col items-center text-center space-y-2">
+                                <div className={`w-16 h-16 rounded-3xl flex items-center justify-center border-2 mb-2 ${selectedTransaction.type === 'deposit' ? 'bg-green-900/20 border-green-500/30 text-green-400' : selectedTransaction.type === 'withdrawal' ? 'bg-red-900/20 border-red-500/30 text-red-400' : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-400'}`}>
+                                    {selectedTransaction.type === 'deposit' ? <ArrowDown className="w-8 h-8" /> : selectedTransaction.type === 'withdrawal' ? <ArrowUp className="w-8 h-8" /> : <Trophy className="w-8 h-8" />}
+                                </div>
+                                <h2 className={`text-3xl font-mono font-black ${selectedTransaction.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {selectedTransaction.amount > 0 ? '+' : ''}{formatCurrency(Math.abs(selectedTransaction.amount))}
+                                </h2>
+                                <div className={`text-xs uppercase font-black px-3 py-1 rounded-full border ${selectedTransaction.status === 'success' ? 'bg-green-900/20 text-green-500 border-green-500/30' : selectedTransaction.status === 'pending' ? 'bg-yellow-900/20 text-yellow-500 border-yellow-500/30' : 'bg-red-900/20 text-red-500 border-red-500/30'}`}>
+                                    {selectedTransaction.status}
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 bg-black/40 p-6 rounded-2xl border border-gray-800">
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500 font-bold uppercase">Type</span>
+                                    <span className="text-white font-black uppercase tracking-wider">{selectedTransaction.type}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500 font-bold uppercase">Method</span>
+                                    <span className="text-white font-black uppercase tracking-wider">{selectedTransaction.method}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500 font-bold uppercase">Date</span>
+                                    <span className="text-white font-black">{formatDate(selectedTransaction.timestamp)}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500 font-bold uppercase">Reference ID</span>
+                                    <span className="text-white font-mono">{selectedTransaction.refId}</span>
+                                </div>
+                                {selectedTransaction.confirmedByUsername && (
+                                    <div className="flex justify-between text-xs pt-2 border-t border-gray-800">
+                                        <span className="text-brand-400 font-bold uppercase">Confirmed By</span>
+                                        <span className="text-brand-400 font-black uppercase tracking-wider">{selectedTransaction.confirmedByUsername}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {selectedTransaction.accountDetails && (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Account Details / Info</p>
+                                    <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700 text-xs text-gray-300 whitespace-pre-wrap font-medium leading-relaxed">
+                                        {selectedTransaction.accountDetails}
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedTransaction.status === 'rejected' && selectedTransaction.rejectionReason && (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] text-red-500 font-black uppercase tracking-widest">Rejection Reason</p>
+                                    <div className="bg-red-900/10 p-4 rounded-xl border border-red-500/20 text-xs text-red-300 font-medium leading-relaxed">
+                                        {selectedTransaction.rejectionReason}
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedTransaction.proofUrl && (
+                                <a 
+                                    href={selectedTransaction.proofUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-xl font-black transition uppercase text-xs tracking-widest border border-gray-700"
+                                >
+                                    <Eye className="w-4 h-4" /> View Payment Proof
+                                </a>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
