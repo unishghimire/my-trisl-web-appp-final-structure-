@@ -3,13 +3,18 @@ import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, orderBy, 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import { Transaction, UserProfile, Slide, PromoCode, Game, PaymentMethod, SiteSettings } from '../types';
 import { formatCurrency, formatDate } from '../utils';
 import { NotificationService } from '../services/NotificationService';
-import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
+import { useInvisibleImage } from '../hooks/useInvisibleImage';
+import { DEFAULT_BANNER, NEXPLAY_LOGO } from '../constants';
+import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
     const { profile } = useAuth();
+    const { showToast } = useNotification();
     const [activeTab, setActiveTab] = useState('tab-dashboard');
     const [pendingTransactions, setPendingTransactions] = useState<Transaction[]>([]);
     const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
@@ -64,6 +69,27 @@ const AdminPanel: React.FC = () => {
     const [notice, setNotice] = useState('');
     const [isNoticeActive, setIsNoticeActive] = useState(false);
 
+    const { handlePaste: handlePasteSlide, handleDrop: handleDropSlide, handleDragOver: handleDragOverSlide } = useInvisibleImage({
+        onUploadStart: () => setUploading(true),
+        onUploadEnd: () => setUploading(false),
+        onUploadSuccess: (url) => setSlideImage(url),
+        onError: (err) => showToast(err, 'error')
+    });
+
+    const { handlePaste: handlePasteGame, handleDrop: handleDropGame, handleDragOver: handleDragOverGame } = useInvisibleImage({
+        onUploadStart: () => setUploading(true),
+        onUploadEnd: () => setUploading(false),
+        onUploadSuccess: (url) => setGameLogo(url),
+        onError: (err) => showToast(err, 'error')
+    });
+
+    const { handlePaste: handlePastePayment, handleDrop: handleDropPayment, handleDragOver: handleDragOverPayment } = useInvisibleImage({
+        onUploadStart: () => setUploading(true),
+        onUploadEnd: () => setUploading(false),
+        onUploadSuccess: (url) => setPaymentQr(url),
+        onError: (err) => showToast(err, 'error')
+    });
+
     // Transaction Review State
     const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
@@ -72,6 +98,22 @@ const AdminPanel: React.FC = () => {
     const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
     const [adjustmentAmount, setAdjustmentAmount] = useState('');
     const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract'>('add');
+
+    // Confirm Modal State
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        isDestructive?: boolean;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {},
+    });
+
+    const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
 
     useEffect(() => {
         if (profile?.role !== 'admin') return;
@@ -164,15 +206,15 @@ const AdminPanel: React.FC = () => {
                 '/wallet'
             );
 
-            alert('Transaction Approved');
+            showToast('Transaction Approved', 'success');
             setPendingTransactions(prev => prev.filter(t => t.id !== tx.id));
         } catch (error) {
             console.error("Error approving transaction:", error);
+            showToast('Failed to approve transaction', 'error');
         }
     };
 
-    const handleRejectTx = async (tx: Transaction) => {
-        if (!rejectionReason && !window.confirm('Reject without reason?')) return;
+    const executeRejectTx = async (tx: Transaction, reason: string) => {
         try {
             const batch = writeBatch(db);
             const txRef = doc(db, 'transactions', tx.id);
@@ -183,7 +225,7 @@ const AdminPanel: React.FC = () => {
             }
             batch.update(txRef, { 
                 status: 'rejected',
-                rejectionReason: rejectionReason || 'No reason provided'
+                rejectionReason: reason || 'No reason provided'
             });
             await batch.commit();
 
@@ -191,24 +233,39 @@ const AdminPanel: React.FC = () => {
             await NotificationService.create(
                 tx.userId,
                 'Transaction Rejected',
-                `Your ${tx.type} of ${formatCurrency(tx.amount)} was rejected. Reason: ${rejectionReason || 'No reason provided'}`,
+                `Your ${tx.type} of ${formatCurrency(tx.amount)} was rejected. Reason: ${reason || 'No reason provided'}`,
                 'alert',
                 '/wallet'
             );
 
-            alert('Transaction Rejected');
+            showToast('Transaction Rejected', 'success');
             setPendingTransactions(prev => prev.filter(t => t.id !== tx.id));
             setSelectedTx(null);
             setRejectionReason('');
         } catch (error) {
             console.error("Error rejecting transaction:", error);
+            showToast('Failed to reject transaction', 'error');
         }
+    };
+
+    const handleRejectTx = (tx: Transaction) => {
+        if (!rejectionReason) {
+            setConfirmModal({
+                isOpen: true,
+                title: 'Reject without reason?',
+                message: 'Are you sure you want to reject this transaction without providing a reason?',
+                isDestructive: true,
+                onConfirm: () => executeRejectTx(tx, rejectionReason)
+            });
+            return;
+        }
+        executeRejectTx(tx, rejectionReason);
     };
 
     const handleAdjustBalance = async () => {
         if (!selectedUser || !adjustmentAmount) return;
         const amount = parseFloat(adjustmentAmount);
-        if (isNaN(amount)) return alert('Invalid amount');
+        if (isNaN(amount)) return showToast('Invalid amount', 'error');
 
         try {
             const finalAmount = adjustmentType === 'add' ? amount : -amount;
@@ -228,17 +285,18 @@ const AdminPanel: React.FC = () => {
                 desc: `Admin Adjustment: ${adjustmentType === 'add' ? 'Added' : 'Subtracted'} ${amount}`
             });
 
-            alert('Balance Adjusted');
+            showToast('Balance Adjusted', 'success');
             setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? { ...u, balance: u.balance + finalAmount } : u));
             setSelectedUser(null);
             setAdjustmentAmount('');
         } catch (error) {
             console.error("Error adjusting balance:", error);
+            showToast('Failed to adjust balance', 'error');
         }
     };
 
     const handleSavePayment = async () => {
-        if (!paymentName || !paymentQr || !paymentInstructions) return alert('Please fill all fields');
+        if (!paymentName || !paymentQr || !paymentInstructions) return showToast('Please fill all fields', 'warning');
         
         try {
             const payData = {
@@ -253,12 +311,12 @@ const AdminPanel: React.FC = () => {
             if (editingPayment) {
                 await updateDoc(doc(db, 'paymentMethods', editingPayment.id), payData);
                 setPaymentMethods(prev => prev.map(p => p.id === editingPayment.id ? { ...p, ...payData } : p));
-                alert('Payment Method Updated');
+                showToast('Payment Method Updated', 'success');
             } else {
                 const newRef = doc(collection(db, 'paymentMethods'));
                 await setDoc(newRef, payData);
                 setPaymentMethods(prev => [{ id: newRef.id, ...payData }, ...prev]);
-                alert('Payment Method Added');
+                showToast('Payment Method Added', 'success');
             }
             
             setIsPaymentModalOpen(false);
@@ -268,35 +326,29 @@ const AdminPanel: React.FC = () => {
             setPaymentInstructions('');
         } catch (error) {
             console.error("Error saving payment method:", error);
+            showToast('Failed to save payment method', 'error');
         }
     };
 
-    const handleDeletePayment = async (id: string) => {
-        if (!window.confirm('Delete this payment method?')) return;
+    const executeDeletePayment = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'paymentMethods', id));
             setPaymentMethods(prev => prev.filter(p => p.id !== id));
+            showToast('Payment method deleted', 'success');
         } catch (error) {
             console.error("Error deleting payment method:", error);
+            showToast('Failed to delete payment method', 'error');
         }
     };
 
-    const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setUploading(true);
-        try {
-            const storageRef = ref(storage, `payments/${Date.now()}_${file.name}`);
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            setPaymentQr(url);
-        } catch (error) {
-            console.error("Error uploading QR:", error);
-            alert("Failed to upload QR");
-        } finally {
-            setUploading(false);
-        }
+    const handleDeletePayment = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Payment Method',
+            message: 'Are you sure you want to delete this payment method?',
+            isDestructive: true,
+            onConfirm: () => executeDeletePayment(id)
+        });
     };
 
     const handleSearchUsers = async () => {
@@ -312,26 +364,8 @@ const AdminPanel: React.FC = () => {
         }
     };
 
-    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setUploading(true);
-        try {
-            const storageRef = ref(storage, `games/${Date.now()}_${file.name}`);
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            setGameLogo(url);
-        } catch (error) {
-            console.error("Error uploading logo:", error);
-            alert("Failed to upload logo");
-        } finally {
-            setUploading(false);
-        }
-    };
-
     const handleSaveGame = async () => {
-        if (!gameName || !gameLogo || !gameModes) return alert('Please fill all fields');
+        if (!gameName || !gameLogo || !gameModes) return showToast('Please fill all fields', 'warning');
         const modesArray = gameModes.split(',').map(m => m.trim()).filter(m => m !== '');
         
         try {
@@ -346,12 +380,12 @@ const AdminPanel: React.FC = () => {
             if (editingGame) {
                 await updateDoc(doc(db, 'games', editingGame.id), gameData);
                 setGames(prev => prev.map(g => g.id === editingGame.id ? { ...g, ...gameData } : g));
-                alert('Game Updated');
+                showToast('Game Updated', 'success');
             } else {
                 const newGameRef = doc(collection(db, 'games'));
                 await setDoc(newGameRef, gameData);
                 setGames(prev => [{ id: newGameRef.id, ...gameData }, ...prev]);
-                alert('Game Added');
+                showToast('Game Added', 'success');
             }
             
             setIsGameModalOpen(false);
@@ -361,11 +395,12 @@ const AdminPanel: React.FC = () => {
             setGameModes('');
         } catch (error) {
             console.error("Error saving game:", error);
+            showToast('Failed to save game', 'error');
         }
     };
 
     const handleSavePromo = async () => {
-        if (!promoCode || !promoAmount || !promoMaxUses) return alert('Please fill all fields');
+        if (!promoCode || !promoAmount || !promoMaxUses) return showToast('Please fill all fields', 'warning');
         try {
             const promoData = {
                 code: promoCode.toUpperCase(),
@@ -379,12 +414,12 @@ const AdminPanel: React.FC = () => {
             if (editingPromo) {
                 await updateDoc(doc(db, 'promocodes', editingPromo.id), promoData);
                 setPromoCodes(prev => prev.map(p => p.id === editingPromo.id ? { ...p, ...promoData } : p));
-                alert('Promo Code Updated');
+                showToast('Promo Code Updated', 'success');
             } else {
                 const newRef = doc(collection(db, 'promocodes'));
                 await setDoc(newRef, promoData);
                 setPromoCodes(prev => [{ id: newRef.id, ...promoData }, ...prev]);
-                alert('Promo Code Added');
+                showToast('Promo Code Added', 'success');
             }
             setIsPromoModalOpen(false);
             setEditingPromo(null);
@@ -393,21 +428,33 @@ const AdminPanel: React.FC = () => {
             setPromoMaxUses('');
         } catch (error) {
             console.error("Error saving promo:", error);
+            showToast('Failed to save promo code', 'error');
         }
     };
 
-    const handleDeletePromo = async (id: string) => {
-        if (!window.confirm('Delete this promo code?')) return;
+    const executeDeletePromo = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'promocodes', id));
             setPromoCodes(prev => prev.filter(p => p.id !== id));
+            showToast('Promo code deleted', 'success');
         } catch (error) {
             console.error("Error deleting promo:", error);
+            showToast('Failed to delete promo code', 'error');
         }
     };
 
+    const handleDeletePromo = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Promo Code',
+            message: 'Are you sure you want to delete this promo code?',
+            isDestructive: true,
+            onConfirm: () => executeDeletePromo(id)
+        });
+    };
+
     const handleSaveSlide = async () => {
-        if (!slideTitle || !slideImage || !slideLink) return alert('Please fill all fields');
+        if (!slideTitle || !slideImage || !slideLink) return showToast('Please fill all fields', 'warning');
         try {
             const slideData = {
                 title: slideTitle,
@@ -420,12 +467,12 @@ const AdminPanel: React.FC = () => {
             if (editingSlide) {
                 await updateDoc(doc(db, 'slides', editingSlide.id), slideData);
                 setSlides(prev => prev.map(s => s.id === editingSlide.id ? { ...s, ...slideData } : s));
-                alert('Slide Updated');
+                showToast('Slide Updated', 'success');
             } else {
                 const newRef = doc(collection(db, 'slides'));
                 await setDoc(newRef, slideData);
                 setSlides(prev => [{ id: newRef.id, ...slideData }, ...prev]);
-                alert('Slide Added');
+                showToast('Slide Added', 'success');
             }
             setIsSlideModalOpen(false);
             setEditingSlide(null);
@@ -434,17 +481,29 @@ const AdminPanel: React.FC = () => {
             setSlideLink('');
         } catch (error) {
             console.error("Error saving slide:", error);
+            showToast('Failed to save slide', 'error');
         }
     };
 
-    const handleDeleteSlide = async (id: string) => {
-        if (!window.confirm('Delete this slide?')) return;
+    const executeDeleteSlide = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'slides', id));
             setSlides(prev => prev.filter(s => s.id !== id));
+            showToast('Slide deleted', 'success');
         } catch (error) {
             console.error("Error deleting slide:", error);
+            showToast('Failed to delete slide', 'error');
         }
+    };
+
+    const handleDeleteSlide = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Slide',
+            message: 'Are you sure you want to delete this slide?',
+            isDestructive: true,
+            onConfirm: () => executeDeleteSlide(id)
+        });
     };
 
     const handleSaveSettings = async () => {
@@ -459,37 +518,32 @@ const AdminPanel: React.FC = () => {
             };
             await setDoc(doc(db, 'settings', 'site'), settingsData);
             setSiteSettings(settingsData as any);
-            alert('Settings Saved');
+            showToast('Settings Saved', 'success');
         } catch (error) {
             console.error("Error saving settings:", error);
+            showToast('Failed to save settings', 'error');
         }
     };
 
-    const handleSlideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        setUploading(true);
-        try {
-            const storageRef = ref(storage, `slides/${Date.now()}_${file.name}`);
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            setSlideImage(url);
-        } catch (error) {
-            console.error("Error uploading slide:", error);
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const handleDeleteGame = async (id: string) => {
-        if (!window.confirm('Are you sure you want to delete this game?')) return;
+    const executeDeleteGame = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'games', id));
             setGames(prev => prev.filter(g => g.id !== id));
-            alert('Game Deleted');
+            showToast('Game Deleted', 'success');
         } catch (error) {
             console.error("Error deleting game:", error);
+            showToast('Failed to delete game', 'error');
         }
+    };
+
+    const handleDeleteGame = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Game',
+            message: 'Are you sure you want to delete this game?',
+            isDestructive: true,
+            onConfirm: () => executeDeleteGame(id)
+        });
     };
 
     const openEditGame = (game: Game) => {
@@ -504,144 +558,203 @@ const AdminPanel: React.FC = () => {
     if (profile?.role !== 'admin') return <div className="text-center text-red-500 mt-10">Restricted Area</div>;
 
     return (
-        <div className="animate-fade-in max-w-6xl mx-auto">
-            <div className="flex border-b border-gray-700 mb-6 overflow-x-auto">
-                {['dashboard', 'transactions', 'users', 'games', 'payments', 'promo', 'settings'].map(tab => (
-                    <button 
-                        key={tab}
-                        onClick={() => setActiveTab(`tab-${tab}`)} 
-                        className={`px-6 py-3 font-bold text-sm transition whitespace-nowrap ${activeTab === `tab-${tab}` ? 'text-white border-b-2 border-brand-500' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    </button>
-                ))}
+        <div className="animate-fade-in max-w-7xl mx-auto flex flex-col md:flex-row gap-6">
+            {/* Sidebar Navigation */}
+            <div className="w-full md:w-64 shrink-0 space-y-2 bg-card p-4 rounded-2xl border border-gray-800 h-fit sticky top-24">
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 px-2">Admin Menu</div>
+                {[
+                    { id: 'dashboard', icon: Layout, label: 'Dashboard' },
+                    { id: 'transactions', icon: CreditCard, label: 'Transactions' },
+                    { id: 'users', icon: Users, label: 'Users' },
+                    { id: 'games', icon: Gamepad2, label: 'Games' },
+                    { id: 'payments', icon: QrCode, label: 'Payments' },
+                    { id: 'promo', icon: Tag, label: 'Promo Codes' },
+                    { id: 'settings', icon: Sliders, label: 'Settings' }
+                ].map(tab => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === `tab-${tab.id}`;
+                    return (
+                        <button 
+                            key={tab.id}
+                            onClick={() => setActiveTab(`tab-${tab.id}`)} 
+                            className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                isActive 
+                                    ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+                                    : 'text-gray-400 hover:bg-dark hover:text-white'
+                            }`}
+                        >
+                            <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                            {tab.label}
+                        </button>
+                    );
+                })}
             </div>
 
-            {activeTab === 'tab-dashboard' && (
+            {/* Main Content Area */}
+            <div className="flex-1 bg-card rounded-2xl border border-gray-800 p-6 min-h-[600px]">
+                {activeTab === 'tab-dashboard' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div className="col-span-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
-                        <div className="bg-card p-4 rounded-xl border border-gray-800 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-blue-900/30 text-blue-400 flex items-center justify-center text-xl border border-blue-500/30">
-                                <Users />
+                    <div className="col-span-full grid grid-cols-1 md:grid-cols-3 gap-6 mb-2">
+                        <div className="relative overflow-hidden bg-gradient-to-br from-blue-900/40 to-blue-900/10 p-6 rounded-2xl border border-blue-500/20 flex items-center gap-5 group">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all"></div>
+                            <div className="w-14 h-14 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-xl border border-blue-500/30 shadow-lg shadow-blue-500/20">
+                                <Users className="w-7 h-7" />
                             </div>
                             <div>
-                                <div className="text-xs text-gray-400 uppercase font-bold">Total User Holdings</div>
-                                <div className="text-xl font-bold text-white">{formatCurrency(stats.totalBalance)}</div>
+                                <div className="text-xs text-blue-200/70 uppercase font-bold tracking-wider mb-1">Total User Holdings</div>
+                                <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(stats.totalBalance)}</div>
                             </div>
                         </div>
-                        <div className="bg-card p-4 rounded-xl border border-gray-800 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-green-900/30 text-green-400 flex items-center justify-center text-xl border border-green-500/30">
-                                <ArrowDown />
+                        <div className="relative overflow-hidden bg-gradient-to-br from-green-900/40 to-green-900/10 p-6 rounded-2xl border border-green-500/20 flex items-center gap-5 group">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:bg-green-500/20 transition-all"></div>
+                            <div className="w-14 h-14 rounded-2xl bg-green-500/20 text-green-400 flex items-center justify-center text-xl border border-green-500/30 shadow-lg shadow-green-500/20">
+                                <ArrowDown className="w-7 h-7" />
                             </div>
                             <div>
-                                <div className="text-xs text-gray-400 uppercase font-bold">Today's Deposits</div>
-                                <div className="text-xl font-bold text-white">{formatCurrency(stats.todayDep)}</div>
+                                <div className="text-xs text-green-200/70 uppercase font-bold tracking-wider mb-1">Today's Deposits</div>
+                                <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(stats.todayDep)}</div>
                             </div>
                         </div>
-                        <div className="bg-card p-4 rounded-xl border border-gray-800 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-red-900/30 text-red-400 flex items-center justify-center text-xl border border-red-500/30">
-                                <ArrowUp />
+                        <div className="relative overflow-hidden bg-gradient-to-br from-red-900/40 to-red-900/10 p-6 rounded-2xl border border-red-500/20 flex items-center gap-5 group">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-red-500/10 rounded-full blur-2xl group-hover:bg-red-500/20 transition-all"></div>
+                            <div className="w-14 h-14 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center text-xl border border-red-500/30 shadow-lg shadow-red-500/20">
+                                <ArrowUp className="w-7 h-7" />
                             </div>
                             <div>
-                                <div className="text-xs text-gray-400 uppercase font-bold">Today's Withdrawals</div>
-                                <div className="text-xl font-bold text-white">{formatCurrency(stats.todayWith)}</div>
+                                <div className="text-xs text-red-200/70 uppercase font-bold tracking-wider mb-1">Today's Withdrawals</div>
+                                <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(stats.todayWith)}</div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-card p-4 rounded-xl border border-gray-800 lg:col-span-2">
-                        <h2 className="font-bold text-white mb-4 border-b border-gray-700 pb-2">Pending Transactions</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-96 overflow-y-auto custom-scrollbar content-start">
+                    <div className="bg-card p-6 rounded-2xl border border-gray-800 lg:col-span-2 shadow-xl">
+                        <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+                            <h2 className="font-bold text-white text-lg flex items-center gap-2">
+                                <Bell className="w-5 h-5 text-brand-400" /> Pending Transactions
+                            </h2>
+                            <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
+                                {pendingTransactions.length} Pending
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[400px] overflow-y-auto custom-scrollbar content-start pr-2">
                             {pendingTransactions.length > 0 ? (
                                 pendingTransactions.map(t => (
-                                    <div key={t.id} className="bg-surface p-4 rounded-xl mb-3 border border-gray-700 shadow-md">
-                                        <div className="flex justify-between items-start mb-3 border-b border-gray-600 pb-2">
+                                    <div key={t.id} className="bg-dark/50 hover:bg-dark p-5 rounded-2xl border border-gray-800 hover:border-gray-700 transition-all shadow-md group">
+                                        <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-3">
                                             <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`font-bold ${t.type === 'deposit' ? 'text-green-400' : 'text-red-400'} uppercase text-sm`}>{t.type}</span>
-                                                    <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-300 border border-gray-600">{t.method}</span>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`font-black tracking-wider ${t.type === 'deposit' ? 'text-green-400' : 'text-red-400'} uppercase text-xs`}>{t.type}</span>
+                                                    <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
                                                 </div>
-                                                <div className="text-[10px] text-gray-500 mt-1">{formatDate(t.timestamp)}</div>
+                                                <div className="text-[10px] text-gray-500 font-mono">{formatDate(t.timestamp)}</div>
                                             </div>
-                                            <div className="text-xl font-bold text-white font-mono">{formatCurrency(Math.abs(t.amount))}</div>
+                                            <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
                                         </div>
-                                        <div className="text-xs text-gray-400 mb-4 break-all">
-                                            <span className="text-gray-600">REF:</span> <span className="text-brand-200 select-all">{t.refId}</span>
+                                        <div className="text-[11px] text-gray-400 mb-5 bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                            <span className="text-gray-600">REF:</span> 
+                                            <span className="text-brand-300 select-all">{t.refId}</span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            <button onClick={() => handleApproveTx(t)} className="bg-green-600 hover:bg-green-500 text-white py-2 rounded-lg text-xs font-bold uppercase flex items-center justify-center gap-2 transition">
+                                            <button onClick={() => handleApproveTx(t)} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
                                                 <Check className="w-4 h-4" /> Approve
                                             </button>
-                                            <button onClick={() => setSelectedTx(t)} className="bg-red-600 hover:bg-red-500 text-white py-2 rounded-lg text-xs font-bold uppercase flex items-center justify-center gap-2 transition">
+                                            <button onClick={() => setSelectedTx(t)} className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
                                                 <Eye className="w-4 h-4" /> Review
                                             </button>
                                         </div>
                                     </div>
                                 ))
                             ) : (
-                                <div className="col-span-full text-gray-500 text-sm text-center py-10 flex flex-col items-center">
-                                    <Check className="text-4xl mb-3 text-gray-700" /> All transactions cleared!
+                                <div className="col-span-full h-full flex flex-col items-center justify-center text-gray-500 py-10">
+                                    <div className="w-16 h-16 bg-dark rounded-full flex items-center justify-center mb-4 border border-gray-800">
+                                        <Check className="text-3xl text-green-500/50" />
+                                    </div>
+                                    <p className="font-bold uppercase tracking-widest text-sm text-gray-600">All Caught Up!</p>
+                                    <p className="text-xs text-gray-700 mt-1">No pending transactions to review.</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
                     {selectedTx && (
-                        <div className="fixed inset-0 bg-black/90 z-[110] flex items-center justify-center p-4">
-                            <div className="bg-card w-full max-w-2xl rounded-2xl border border-gray-800 p-6 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-                                <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-                                    <h3 className="text-xl font-bold text-white uppercase tracking-widest">Review Transaction</h3>
-                                    <button onClick={() => setSelectedTx(null)} className="text-gray-500 hover:text-white"><X /></button>
+                        <div className="fixed inset-0 bg-black/95 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-fade-in">
+                            <div className="bg-card w-full max-w-2xl rounded-3xl border border-gray-800 p-8 space-y-8 shadow-2xl overflow-y-auto max-h-[90vh]">
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-5">
+                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                        <CreditCard className="text-brand-500" /> Review Transaction
+                                    </h3>
+                                    <button onClick={() => setSelectedTx(null)} className="text-gray-500 hover:text-white bg-dark p-2 rounded-full transition"><X className="w-5 h-5" /></button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <div className="bg-dark p-4 rounded-xl border border-gray-800">
-                                            <div className="text-xs text-gray-500 uppercase font-bold mb-1">Details</div>
-                                            <div className="text-white font-bold">{selectedTx.type.toUpperCase()} - {formatCurrency(selectedTx.amount)}</div>
-                                            <div className="text-sm text-gray-400 mt-1">Method: {selectedTx.method}</div>
-                                            <div className="text-sm text-gray-400">User ID: {selectedTx.userId}</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-6">
+                                        <div className="bg-dark p-5 rounded-2xl border border-gray-800 shadow-inner">
+                                            <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-3">Transaction Details</div>
+                                            <div className="flex items-end gap-3 mb-4">
+                                                <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(Math.abs(selectedTx.amount))}</div>
+                                                <div className={`text-sm font-bold uppercase mb-1 ${selectedTx.type === 'deposit' ? 'text-green-400' : 'text-red-400'}`}>{selectedTx.type}</div>
+                                            </div>
+                                            <div className="space-y-2 text-sm font-mono">
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
+                                                    <span className="text-gray-500">Method</span>
+                                                    <span className="text-white">{selectedTx.method}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
+                                                    <span className="text-gray-500">User ID</span>
+                                                    <span className="text-gray-400 text-xs">{selectedTx.userId}</span>
+                                                </div>
+                                                <div className="flex justify-between pb-1">
+                                                    <span className="text-gray-500">Ref ID</span>
+                                                    <span className="text-brand-300 text-xs">{selectedTx.refId}</span>
+                                                </div>
+                                            </div>
+                                            
                                             {selectedTx.accountDetails && (
-                                                <div className="mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-                                                    <div className="text-[10px] text-blue-400 uppercase font-bold mb-1">Withdrawal Account</div>
-                                                    <div className="text-xs text-white whitespace-pre-wrap">{selectedTx.accountDetails}</div>
+                                                <div className="mt-5 p-4 bg-blue-900/10 border border-blue-500/20 rounded-xl">
+                                                    <div className="text-[10px] text-blue-400 uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
+                                                        <Info className="w-3 h-3" /> Account / Transfer Info
+                                                    </div>
+                                                    <div className="text-xs text-blue-100 whitespace-pre-wrap font-mono leading-relaxed">{selectedTx.accountDetails}</div>
                                                 </div>
                                             )}
                                         </div>
 
                                         <div>
-                                            <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Rejection Reason (Optional)</label>
+                                            <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 block">Rejection Reason (Optional)</label>
                                             <textarea 
                                                 value={rejectionReason}
                                                 onChange={(e) => setRejectionReason(e.target.value)}
-                                                className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none h-24 text-sm"
-                                                placeholder="Explain why this was rejected..."
+                                                className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 outline-none h-28 text-sm transition-all"
+                                                placeholder="Explain why this is being rejected..."
                                             />
                                         </div>
                                     </div>
 
-                                    <div className="space-y-4">
-                                        <div className="text-xs text-gray-500 uppercase font-bold mb-1">Proof of Payment</div>
+                                    <div className="space-y-6">
+                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2">Proof of Payment</div>
                                         {selectedTx.proofUrl ? (
-                                            <div className="relative group">
-                                                <img src={selectedTx.proofUrl} className="w-full aspect-square object-contain bg-black rounded-xl border border-gray-800" alt="Proof" />
-                                                <a href={selectedTx.proofUrl} target="_blank" rel="noreferrer" className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition rounded-xl">
-                                                    <Download className="text-white" />
-                                                </a>
+                                            <div className="relative group rounded-2xl overflow-hidden border border-gray-800 bg-black">
+                                                <img src={selectedTx.proofUrl} className="w-full aspect-square object-contain" alt="Proof" />
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                                                    <a href={selectedTx.proofUrl} target="_blank" rel="noreferrer" className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all border border-white/10">
+                                                        <Eye className="w-5 h-5" /> View Full Image
+                                                    </a>
+                                                </div>
                                             </div>
                                         ) : (
-                                            <div className="w-full aspect-square bg-dark rounded-xl border border-gray-800 flex items-center justify-center text-gray-600 text-sm italic">
-                                                No proof uploaded
+                                            <div className="w-full aspect-square bg-dark/50 rounded-2xl border-2 border-dashed border-gray-800 flex flex-col items-center justify-center text-gray-600">
+                                                <ImageIcon className="w-12 h-12 mb-3 opacity-20" />
+                                                <span className="text-xs font-bold uppercase tracking-widest">No Proof Uploaded</span>
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <button onClick={() => handleRejectTx(selectedTx)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl font-bold transition uppercase text-sm">
-                                        Reject Transaction
+                                <div className="flex gap-4 pt-6 border-t border-gray-800">
+                                    <button onClick={() => handleRejectTx(selectedTx)} className="flex-1 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/30 hover:border-red-500 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
+                                        Reject
                                     </button>
-                                    <button onClick={() => handleApproveTx(selectedTx)} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold transition uppercase text-sm">
+                                    <button onClick={() => handleApproveTx(selectedTx)} className="flex-[2] bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
                                         Approve Transaction
                                     </button>
                                 </div>
@@ -697,7 +810,7 @@ const AdminPanel: React.FC = () => {
 
                     {isSlideModalOpen && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl">
+                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
                                 <h3 className="text-xl font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-4">
                                     {editingSlide ? 'Edit Slide' : 'Add Slide'}
                                 </h3>
@@ -707,17 +820,35 @@ const AdminPanel: React.FC = () => {
                                         <input type="text" value={slideTitle} onChange={e => setSlideTitle(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Image</label>
-                                        <div className="flex gap-4 items-center">
-                                            {slideImage ? (
-                                                <img src={slideImage} className="w-20 h-12 object-cover rounded border border-gray-700" alt="Preview" />
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Image (Paste or Drop)</label>
+                                        <div 
+                                            onPaste={handlePasteSlide}
+                                            onDrop={handleDropSlide}
+                                            onDragOver={handleDragOverSlide}
+                                            className={`relative w-full aspect-video rounded-xl border-2 border-dashed transition-all flex items-center justify-center overflow-hidden group cursor-pointer ${uploading ? 'border-brand-500 bg-brand-500/10' : 'border-gray-700 hover:border-brand-500 bg-dark'}`}
+                                        >
+                                            {uploading ? (
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    <span className="text-[10px] text-brand-400 font-bold uppercase">Uploading...</span>
+                                                </div>
                                             ) : (
-                                                <label className="w-20 h-12 border-2 border-dashed border-gray-700 rounded flex items-center justify-center cursor-pointer hover:border-brand-500 transition">
-                                                    <Upload className="w-4 h-4 text-gray-500" />
-                                                    <input type="file" className="hidden" onChange={handleSlideUpload} />
-                                                </label>
+                                                <>
+                                                    <img 
+                                                        src={slideImage || DEFAULT_BANNER} 
+                                                        alt="Slide Preview" 
+                                                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
+                                                        onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
+                                                        referrerPolicy="no-referrer"
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition">
+                                                        <Plus className="w-8 h-8 text-white" />
+                                                    </div>
+                                                </>
                                             )}
-                                            <input type="text" value={slideImage} onChange={e => setSlideImage(e.target.value)} className="flex-grow bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none text-xs" placeholder="Or paste URL..." />
+                                        </div>
+                                        <div className="mt-2">
+                                            <input type="text" value={slideImage} onChange={e => setSlideImage(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none text-xs" placeholder="Or paste URL..." />
                                         </div>
                                     </div>
                                     <div>
@@ -816,6 +947,30 @@ const AdminPanel: React.FC = () => {
                                     </div>
                                     <div className="flex gap-2">
                                         <button onClick={() => setSelectedUser(u)} className="bg-blue-600 px-3 py-1 rounded text-xs text-white">Manage</button>
+                                        <button 
+                                            onClick={() => {
+                                                setConfirmModal({
+                                                    isOpen: true,
+                                                    title: u.isBanned ? 'Unblock User' : 'Block User',
+                                                    message: `Are you sure you want to ${u.isBanned ? 'unblock' : 'block'} ${u.username}?`,
+                                                    isDestructive: true,
+                                                    onConfirm: async () => {
+                                                        try {
+                                                            await updateDoc(doc(db, 'users', u.uid), { isBanned: !u.isBanned });
+                                                            setUsers(prev => prev.map(user => user.uid === u.uid ? { ...user, isBanned: !u.isBanned } : user));
+                                                            showToast(`User ${u.isBanned ? 'unblocked' : 'blocked'}`, 'success');
+                                                        } catch (error) {
+                                                            console.error("Error updating user status:", error);
+                                                            showToast('Failed to update user status', 'error');
+                                                        }
+                                                        closeConfirmModal();
+                                                    }
+                                                });
+                                            }}
+                                            className={`px-3 py-1 rounded text-xs font-bold ${u.isBanned ? 'bg-green-600 hover:bg-green-500' : 'bg-red-600 hover:bg-red-500'} text-white`}
+                                        >
+                                            {u.isBanned ? 'Unblock' : 'Block'}
+                                        </button>
                                     </div>
                                 </div>
                             ))
@@ -826,7 +981,7 @@ const AdminPanel: React.FC = () => {
 
                     {selectedUser && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-6 shadow-2xl">
+                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-4">
                                     <h3 className="text-xl font-bold text-white uppercase tracking-widest">Manage User</h3>
                                     <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-white"><X /></button>
@@ -914,7 +1069,7 @@ const AdminPanel: React.FC = () => {
 
                     {isGameModalOpen && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl">
+                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
                                 <h3 className="text-xl font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-4">
                                     {editingGame ? 'Edit Game' : 'Add Game'}
                                 </h3>
@@ -930,35 +1085,41 @@ const AdminPanel: React.FC = () => {
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Logo/Banner</label>
-                                        <div className="flex gap-4 items-center">
-                                            {gameLogo ? (
-                                                <div className="relative group">
-                                                    <img src={gameLogo} className="w-20 h-20 object-cover rounded-lg border border-gray-700" alt="Preview" />
-                                                    <button 
-                                                        onClick={() => setGameLogo('')}
-                                                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                                                    >
-                                                        <X className="w-3 h-3" />
-                                                    </button>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Logo/Banner (Paste or Drop)</label>
+                                        <div 
+                                            onPaste={handlePasteGame}
+                                            onDrop={handleDropGame}
+                                            onDragOver={handleDragOverGame}
+                                            className={`relative w-full aspect-video rounded-xl border-2 border-dashed transition-all flex items-center justify-center overflow-hidden group cursor-pointer ${uploading ? 'border-brand-500 bg-brand-500/10' : 'border-gray-700 hover:border-brand-500 bg-dark'}`}
+                                        >
+                                            {uploading ? (
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    <span className="text-[10px] text-brand-400 font-bold uppercase">Uploading...</span>
                                                 </div>
                                             ) : (
-                                                <label className="w-20 h-20 border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-brand-500 transition text-gray-500 hover:text-brand-500">
-                                                    <Upload className="w-6 h-6" />
-                                                    <span className="text-[10px] mt-1 font-bold">UPLOAD</span>
-                                                    <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploading} />
-                                                </label>
+                                                <>
+                                                    <img 
+                                                        src={gameLogo || DEFAULT_BANNER} 
+                                                        alt="Game Logo Preview" 
+                                                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
+                                                        onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
+                                                        referrerPolicy="no-referrer"
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition">
+                                                        <Plus className="w-8 h-8 text-white" />
+                                                    </div>
+                                                </>
                                             )}
-                                            <div className="flex-grow">
-                                                <input 
-                                                    type="text" 
-                                                    value={gameLogo}
-                                                    onChange={(e) => setGameLogo(e.target.value)}
-                                                    className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none text-sm"
-                                                    placeholder="Or paste image URL..."
-                                                />
-                                                {uploading && <div className="text-[10px] text-brand-400 mt-1 animate-pulse">Uploading...</div>}
-                                            </div>
+                                        </div>
+                                        <div className="mt-2">
+                                            <input 
+                                                type="text" 
+                                                value={gameLogo}
+                                                onChange={(e) => setGameLogo(e.target.value)}
+                                                className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none text-sm"
+                                                placeholder="Or paste image URL..."
+                                            />
                                         </div>
                                     </div>
                                     <div>
@@ -1058,28 +1219,28 @@ const AdminPanel: React.FC = () => {
 
                     {isPaymentModalOpen && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl">
+                            <div className="bg-card w-full max-w-lg rounded-2xl border border-gray-800 p-8 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
                                 <h3 className="text-xl font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-4">
                                     {editingPayment ? 'Edit Payment Method' : 'Add Payment Method'}
                                 </h3>
                                 
-                                <div className="space-y-4">
+                                <div className="space-y-5">
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Method Name</label>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Method Name</label>
                                         <input 
                                             type="text" 
                                             value={paymentName}
                                             onChange={(e) => setPaymentName(e.target.value)}
-                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none"
+                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
                                             placeholder="e.g. eSewa (Personal)"
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Type</label>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Type</label>
                                         <select 
                                             value={paymentType}
                                             onChange={(e) => setPaymentType(e.target.value as any)}
-                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none"
+                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
                                         >
                                             <option value="eSewa">eSewa</option>
                                             <option value="Khalti">Khalti</option>
@@ -1088,59 +1249,65 @@ const AdminPanel: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">QR Code Image</label>
-                                        <div className="flex gap-4 items-center">
-                                            {paymentQr ? (
-                                                <div className="relative group">
-                                                    <img src={paymentQr} className="w-20 h-20 object-contain bg-white rounded-lg border border-gray-700" alt="QR Preview" />
-                                                    <button 
-                                                        onClick={() => setPaymentQr('')}
-                                                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                                                    >
-                                                        <X className="w-3 h-3" />
-                                                    </button>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">QR Code Image (Paste or Drop)</label>
+                                        <div 
+                                            onPaste={handlePastePayment}
+                                            onDrop={handleDropPayment}
+                                            onDragOver={handleDragOverPayment}
+                                            className={`relative w-48 h-48 mx-auto rounded-xl border-2 border-dashed transition-all flex items-center justify-center overflow-hidden group cursor-pointer ${uploading ? 'border-brand-500 bg-brand-500/10' : 'border-gray-700 hover:border-brand-500 bg-dark'}`}
+                                        >
+                                            {uploading ? (
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    <span className="text-[10px] text-brand-400 font-bold uppercase">Uploading...</span>
                                                 </div>
                                             ) : (
-                                                <label className="w-20 h-20 border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-brand-500 transition text-gray-500 hover:text-brand-500">
-                                                    <Upload className="w-6 h-6" />
-                                                    <span className="text-[10px] mt-1 font-bold">QR</span>
-                                                    <input type="file" className="hidden" accept="image/*" onChange={handleQrUpload} disabled={uploading} />
-                                                </label>
+                                                <>
+                                                    <img 
+                                                        src={paymentQr || NEXPLAY_LOGO} 
+                                                        alt="QR Preview" 
+                                                        className="w-full h-full object-contain opacity-80 group-hover:opacity-100 transition"
+                                                        onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
+                                                        referrerPolicy="no-referrer"
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition">
+                                                        <Plus className="w-8 h-8 text-white" />
+                                                    </div>
+                                                </>
                                             )}
-                                            <div className="flex-grow">
-                                                <input 
-                                                    type="text" 
-                                                    value={paymentQr}
-                                                    onChange={(e) => setPaymentQr(e.target.value)}
-                                                    className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none text-sm"
-                                                    placeholder="Or paste QR URL..."
-                                                />
-                                                {uploading && <div className="text-[10px] text-brand-400 mt-1 animate-pulse">Uploading...</div>}
-                                            </div>
+                                        </div>
+                                        <div className="mt-3">
+                                            <input 
+                                                type="text" 
+                                                value={paymentQr}
+                                                onChange={(e) => setPaymentQr(e.target.value)}
+                                                className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none text-sm transition"
+                                                placeholder="Or paste QR URL..."
+                                            />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Instructions (Account Name, Number, etc.)</label>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Instructions (Account Name, Number, etc.)</label>
                                         <textarea 
                                             value={paymentInstructions}
                                             onChange={(e) => setPaymentInstructions(e.target.value)}
-                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none h-24"
+                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none h-24 transition"
                                             placeholder="Account Name: John Doe&#10;Number: 98XXXXXXXX"
                                         />
                                     </div>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 bg-gray-900/50 p-3 rounded-lg border border-gray-800">
                                         <input 
                                             type="checkbox" 
                                             id="paymentActive"
                                             checked={paymentActive}
                                             onChange={(e) => setPaymentActive(e.target.checked)}
-                                            className="w-4 h-4 accent-brand-500"
+                                            className="w-5 h-5 accent-brand-500 cursor-pointer"
                                         />
-                                        <label htmlFor="paymentActive" className="text-sm text-gray-300 font-bold uppercase">Active (Visible to users)</label>
+                                        <label htmlFor="paymentActive" className="text-sm text-gray-300 font-bold uppercase cursor-pointer">Active (Visible to users)</label>
                                     </div>
                                 </div>
 
-                                <div className="flex gap-3 pt-4">
+                                <div className="flex gap-4 pt-2">
                                     <button 
                                         onClick={() => setIsPaymentModalOpen(false)}
                                         className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-bold transition"
@@ -1215,7 +1382,7 @@ const AdminPanel: React.FC = () => {
 
                     {isPromoModalOpen && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl">
+                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
                                 <h3 className="text-xl font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-4">
                                     {editingPromo ? 'Edit Promo Code' : 'Add Promo Code'}
                                 </h3>
@@ -1330,6 +1497,16 @@ const AdminPanel: React.FC = () => {
                     </div>
                 </div>
             )}
+            </div>
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={closeConfirmModal}
+                isDestructive={confirmModal.isDestructive}
+            />
         </div>
     );
 };

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { UserProfile } from '../types';
 import { formatCurrency } from '../utils';
 import { Crown } from 'lucide-react';
@@ -9,18 +9,45 @@ const Leaderboard: React.FC = () => {
     const [topEarners, setTopEarners] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
 
+    const handleFirestoreError = (error: any, operationType: string, path: string) => {
+        const errInfo = {
+            error: error instanceof Error ? error.message : String(error),
+            authInfo: {
+                userId: auth.currentUser?.uid,
+                email: auth.currentUser?.email,
+                emailVerified: auth.currentUser?.emailVerified,
+                isAnonymous: auth.currentUser?.isAnonymous,
+                tenantId: auth.currentUser?.tenantId,
+                providerInfo: auth.currentUser?.providerData.map(provider => ({
+                    providerId: provider.providerId,
+                    displayName: provider.displayName,
+                    email: provider.email,
+                    photoUrl: provider.photoURL
+                })) || []
+            },
+            operationType,
+            path
+        };
+        console.error('Firestore Error: ', JSON.stringify(errInfo));
+        throw new Error(JSON.stringify(errInfo));
+    };
+
     useEffect(() => {
         const fetchLeaderboard = async () => {
+            const path = 'users_public';
             try {
                 const snap = await getDocs(query(
-                    collection(db, 'users_public'),
+                    collection(db, path),
                     orderBy('totalEarnings', 'desc'),
                     limit(10)
                 ));
                 const earners = snap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
                 setTopEarners(earners);
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Error fetching leaderboard:", error);
+                if (error.message?.includes('insufficient permissions')) {
+                    handleFirestoreError(error, 'list', path);
+                }
             } finally {
                 setLoading(false);
             }

@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy, Timestamp, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase';
+import { collection, query, where, getDocs, orderBy, Timestamp, addDoc, serverTimestamp, doc, getDoc, writeBatch, increment } from 'firebase/firestore';
+import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import { Transaction, PaymentMethod, SiteSettings } from '../types';
 import { formatCurrency, formatDate } from '../utils';
-import { ArrowDown, ArrowUp, Trophy, Gift, Plus, LogOut, QrCode, Info, Upload, CheckCircle, X, ChevronRight, CreditCard, Eye, AlertTriangle } from 'lucide-react';
+import { ArrowDown, ArrowUp, Trophy, Gift, Plus, LogOut, QrCode, Info, CheckCircle, X, ChevronRight, CreditCard, Eye, AlertTriangle } from 'lucide-react';
 
 const Wallet: React.FC = () => {
     const { user, profile } = useAuth();
+    const { showToast } = useNotification();
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw' | 'history'>('overview');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -18,8 +19,8 @@ const Wallet: React.FC = () => {
     // Deposit State
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
     const [depositAmount, setDepositAmount] = useState('');
-    const [proofFile, setProofFile] = useState<File | null>(null);
-    const [proofPreview, setProofPreview] = useState<string | null>(null);
+    const [senderNumber, setSenderNumber] = useState('');
+    const [transactionCode, setTransactionCode] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Withdrawal State
@@ -61,31 +62,16 @@ const Wallet: React.FC = () => {
         fetchData();
     }, [user]);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setProofFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => setProofPreview(reader.result as string);
-            reader.readAsDataURL(file);
-        }
-    };
-
     const handleDepositSubmit = async () => {
-        if (!user || !selectedMethod || !depositAmount || !proofFile) {
-            return alert('Please fill all fields and upload proof');
+        if (!user || !selectedMethod || !depositAmount || !senderNumber || !transactionCode) {
+            return showToast('Please fill all fields', 'error');
         }
 
         const amount = parseFloat(depositAmount);
-        if (isNaN(amount) || amount <= 0) return alert('Invalid amount');
+        if (isNaN(amount) || amount <= 0) return showToast('Invalid amount', 'error');
 
         setIsSubmitting(true);
         try {
-            // 1. Upload Proof
-            const storageRef = ref(storage, `proofs/${user.uid}/${Date.now()}_${proofFile.name}`);
-            await uploadBytes(storageRef, proofFile);
-            const proofUrl = await getDownloadURL(storageRef);
-
             // 2. Create Transaction
             await addDoc(collection(db, 'transactions'), {
                 userId: user.uid,
@@ -94,20 +80,20 @@ const Wallet: React.FC = () => {
                 method: selectedMethod.name,
                 status: 'pending',
                 timestamp: serverTimestamp(),
-                proofUrl: proofUrl,
+                accountDetails: `Sender Number: ${senderNumber}\nTransaction Code/Name: ${transactionCode}`,
                 refId: `DEP-${Date.now()}`
             });
 
-            alert('Deposit request submitted! Please wait for admin approval.');
+            showToast('Deposit request submitted! Please wait for admin approval.', 'success');
             setActiveTab('history');
             // Reset form
             setSelectedMethod(null);
             setDepositAmount('');
-            setProofFile(null);
-            setProofPreview(null);
+            setSenderNumber('');
+            setTransactionCode('');
         } catch (error) {
             console.error("Error submitting deposit:", error);
-            alert('Failed to submit deposit request');
+            showToast('Failed to submit deposit request', 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -115,20 +101,23 @@ const Wallet: React.FC = () => {
 
     const handleWithdrawSubmit = async () => {
         if (!user || !withdrawAmount || !withdrawMethod || !accountDetails) {
-            return alert('Please fill all fields');
+            return showToast('Please fill all fields', 'error');
         }
 
         const amount = parseFloat(withdrawAmount);
-        if (isNaN(amount) || amount <= 0) return alert('Invalid amount');
+        if (isNaN(amount) || amount <= 0) return showToast('Invalid amount', 'error');
         if (settings?.minWithdrawal && amount < settings.minWithdrawal) {
-            return alert(`Minimum withdrawal amount is ${formatCurrency(settings.minWithdrawal)}`);
+            return showToast(`Minimum withdrawal amount is ${formatCurrency(settings.minWithdrawal)}`, 'error');
         }
-        if (amount > (profile?.balance || 0)) return alert('Insufficient balance');
+        if (amount > (profile?.balance || 0)) return showToast('Insufficient balance', 'error');
 
         setIsSubmitting(true);
         try {
-            // Create Transaction
-            await addDoc(collection(db, 'transactions'), {
+            const batch = writeBatch(db);
+            
+            // 1. Create Transaction
+            const txRef = doc(collection(db, 'transactions'));
+            batch.set(txRef, {
                 userId: user.uid,
                 type: 'withdrawal',
                 amount: -amount,
@@ -139,7 +128,15 @@ const Wallet: React.FC = () => {
                 refId: `WIT-${Date.now()}`
             });
 
-            alert('Withdrawal request submitted! Please wait for admin approval.');
+            // 2. Deduct Balance
+            const userRef = doc(db, 'users', user.uid);
+            batch.update(userRef, {
+                balance: increment(-amount)
+            });
+
+            await batch.commit();
+
+            showToast('Withdrawal request submitted! Please wait for admin approval.', 'success');
             setActiveTab('history');
             // Reset form
             setWithdrawAmount('');
@@ -147,7 +144,7 @@ const Wallet: React.FC = () => {
             setAccountDetails('');
         } catch (error) {
             console.error("Error submitting withdrawal:", error);
-            alert('Failed to submit withdrawal request');
+            showToast('Failed to submit withdrawal request', 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -155,9 +152,9 @@ const Wallet: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh]">
-                <div className="loader mb-4"></div>
-                <p className="text-brand-500 text-sm animate-pulse font-mono">ESTABLISHING UPLINK...</p>
+            <div className="min-h-[60vh] flex flex-col items-center justify-center">
+                <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-xs text-gray-500 font-black uppercase tracking-widest">Loading Wallet...</p>
             </div>
         );
     }
@@ -319,24 +316,25 @@ const Wallet: React.FC = () => {
                                     </div>
 
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase font-bold mb-2 block">Upload Proof (Screenshot)</label>
-                                        {proofPreview ? (
-                                            <div className="relative group">
-                                                <img src={proofPreview} className="w-full aspect-video object-cover rounded-xl border border-gray-700" alt="Proof Preview" />
-                                                <button 
-                                                    onClick={() => { setProofFile(null); setProofPreview(null); }}
-                                                    className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full shadow-lg"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <label className="w-full aspect-video border-2 border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-brand-500 transition text-gray-500 hover:text-brand-500 bg-dark/50">
-                                                <Upload className="w-8 h-8 mb-2" />
-                                                <span className="text-xs font-bold uppercase tracking-widest">Click to upload proof</span>
-                                                <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
-                                            </label>
-                                        )}
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-2 block">Sender Number</label>
+                                        <input 
+                                            type="text" 
+                                            value={senderNumber}
+                                            onChange={(e) => setSenderNumber(e.target.value)}
+                                            className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
+                                            placeholder="e.g. 98XXXXXXXX"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-2 block">Transaction Code or Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={transactionCode}
+                                            onChange={(e) => setTransactionCode(e.target.value)}
+                                            className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
+                                            placeholder="e.g. TXN123456 or John Doe"
+                                        />
                                     </div>
 
                                     <button 
@@ -468,6 +466,16 @@ const Wallet: React.FC = () => {
                                             <div className="text-[10px] text-red-300">
                                                 <span className="font-bold uppercase block mb-1">Rejection Reason:</span>
                                                 {t.rejectionReason}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {t.accountDetails && (
+                                        <div className="p-3 bg-blue-900/10 border border-blue-500/20 rounded-xl flex gap-3 items-start">
+                                            <Info className="text-blue-500 shrink-0 w-4 h-4 mt-0.5" />
+                                            <div className="text-[10px] text-blue-300">
+                                                <span className="font-bold uppercase block mb-1">Details:</span>
+                                                <span className="whitespace-pre-wrap">{t.accountDetails}</span>
                                             </div>
                                         </div>
                                     )}

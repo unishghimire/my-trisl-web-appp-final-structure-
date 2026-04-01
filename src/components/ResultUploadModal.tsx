@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase';
-import { Tournament, UserProfile } from '../types';
+import { db } from '../firebase';
+import { Tournament } from '../types';
 import Modal from './Modal';
-import { Upload, User, Plus, Trash2, Save, FileText } from 'lucide-react';
+import { Upload, User, Plus, Trash2, Save, Trophy, Users, DollarSign, CheckCircle2, AlertCircle } from 'lucide-react';
 import { NotificationService } from '../services/NotificationService';
+import { useNotification } from '../context/NotificationContext';
+import { motion, AnimatePresence } from 'motion/react';
+import { useInvisibleImage } from '../hooks/useInvisibleImage';
 
 interface ResultUploadModalProps {
     isOpen: boolean;
@@ -15,12 +17,22 @@ interface ResultUploadModalProps {
 }
 
 const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, tournament, onSuccess }) => {
+    const { showToast } = useNotification();
     const [activeTab, setActiveTab] = useState<'file' | 'manual'>('file');
     const [participants, setParticipants] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [resultFile, setResultFile] = useState<File | null>(null);
     const [resultUrl, setResultUrl] = useState('');
     const [winners, setWinners] = useState<{ uid: string; amount: number; rank: number; username: string }[]>([]);
+
+    const { handlePaste, handleDrop, handleDragOver, isProcessing } = useInvisibleImage({
+        onUploadStart: () => setLoading(true),
+        onUploadEnd: () => setLoading(false),
+        onUploadSuccess: (url) => {
+            setResultUrl(url);
+            showToast('Result image processed successfully', 'success');
+        },
+        onError: (err) => showToast(err, 'error')
+    });
 
     useEffect(() => {
         if (isOpen && tournament.id) {
@@ -48,25 +60,6 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
             }
         }
     }, [isOpen, tournament]);
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setLoading(true);
-        try {
-            const storageRef = ref(storage, `results/${tournament.id}_${Date.now()}_${file.name}`);
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            setResultUrl(url);
-            setResultFile(file);
-        } catch (error) {
-            console.error("Error uploading result file:", error);
-            alert("Failed to upload file");
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleAddWinner = () => {
         const nextRank = winners.length + 1;
@@ -146,138 +139,206 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
                 `/details/${tournament.id}`
             );
 
+            showToast('Results finalized and winners paid!', 'success');
             onSuccess();
             onClose();
         } catch (error) {
             console.error("Error uploading results:", error);
-            alert("Failed to upload results. Please try again.");
+            showToast("Failed to upload results. Please try again.", "error");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Upload Results: ${tournament.title}`}>
+        <Modal isOpen={isOpen} onClose={onClose} title={`Finalize Results: ${tournament.title}`} maxWidth="max-w-2xl">
             <div className="space-y-6">
-                <div className="flex border-b border-gray-700">
-                    <button 
-                        onClick={() => setActiveTab('file')}
-                        className={`flex-1 py-2 text-sm font-bold transition ${activeTab === 'file' ? 'text-brand-400 border-b-2 border-brand-400' : 'text-gray-500 hover:text-gray-300'}`}
-                    >
-                        <div className="flex items-center justify-center gap-2">
-                            <Upload className="w-4 h-4" /> File Upload
-                        </div>
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('manual')}
-                        className={`flex-1 py-2 text-sm font-bold transition ${activeTab === 'manual' ? 'text-brand-400 border-b-2 border-brand-400' : 'text-gray-500 hover:text-gray-300'}`}
-                    >
-                        <div className="flex items-center justify-center gap-2">
-                            <User className="w-4 h-4" /> Manual Entry
-                        </div>
-                    </button>
+                {/* Tabs */}
+                <div className="flex p-1 bg-dark rounded-2xl border border-gray-800">
+                    {[
+                        { id: 'file', label: 'File Upload', icon: Upload },
+                        { id: 'manual', label: 'Manual Entry', icon: User },
+                    ].map((tab) => (
+                        <button 
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as any)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-black transition-all ${
+                                activeTab === tab.id 
+                                ? 'bg-brand-600 text-white shadow-lg' 
+                                : 'text-gray-500 hover:text-gray-300'
+                            }`}
+                        >
+                            <tab.icon className="w-4 h-4" /> {tab.label}
+                        </button>
+                    ))}
                 </div>
 
-                {activeTab === 'file' ? (
-                    <div className="space-y-4">
-                        <p className="text-sm text-gray-400">Upload a screenshot or document containing the final match results.</p>
-                        <div className="border-2 border-dashed border-gray-700 rounded-xl p-8 text-center hover:border-brand-500 transition cursor-pointer relative group">
-                            <input 
-                                type="file" 
-                                onChange={handleFileChange}
-                                className="absolute inset-0 opacity-0 cursor-pointer"
-                                accept="image/*,.pdf,.csv"
-                            />
-                            <div className="flex flex-col items-center">
-                                <Upload className="w-10 h-10 text-gray-600 group-hover:text-brand-500 mb-2" />
-                                <span className="text-sm text-gray-500 group-hover:text-gray-300">
-                                    {resultFile ? resultFile.name : 'Click or drag to upload result file'}
-                                </span>
+                <AnimatePresence mode="wait">
+                    {activeTab === 'file' ? (
+                        <motion.div 
+                            key="file"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-4"
+                        >
+                            <div className="bg-brand-500/5 border border-brand-500/10 p-4 rounded-2xl flex gap-3 mb-4">
+                                <AlertCircle className="w-5 h-5 text-brand-500 shrink-0" />
+                                <p className="text-xs text-gray-400 leading-relaxed">
+                                    Upload a screenshot of the final match results. This will be visible to all participants as proof of results.
+                                </p>
                             </div>
-                        </div>
-                        {resultUrl && (
-                            <div className="mt-4">
-                                <p className="text-xs text-gray-500 mb-2 uppercase font-bold">Preview:</p>
-                                <img src={resultUrl} alt="Result Preview" className="w-full h-40 object-cover rounded-lg border border-gray-700" />
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                        <div className="flex justify-between items-center mb-2">
-                            <h4 className="text-sm font-bold text-gray-300 uppercase">Winner List</h4>
-                            <button 
-                                onClick={handleAddWinner}
-                                className="text-xs bg-gray-800 hover:bg-gray-700 text-brand-400 px-2 py-1 rounded flex items-center gap-1 transition"
-                            >
-                                <Plus className="w-3 h-3" /> Add Row
-                            </button>
-                        </div>
-                        {winners.map((winner, index) => (
-                            <div key={index} className="bg-surface p-3 rounded-lg border border-gray-700 space-y-3 relative">
-                                <div className="flex gap-3">
-                                    <div className="w-16">
-                                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Rank</label>
-                                        <input 
-                                            type="number" 
-                                            value={winner.rank}
-                                            onChange={(e) => handleWinnerChange(index, 'rank', parseInt(e.target.value))}
-                                            className="w-full bg-dark border border-gray-700 rounded p-1.5 text-sm text-white focus:border-brand-500 outline-none"
-                                        />
-                                    </div>
-                                    <div className="flex-1">
-                                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Participant</label>
-                                        <select 
-                                            value={winner.uid}
-                                            onChange={(e) => handleWinnerChange(index, 'uid', e.target.value)}
-                                            className="w-full bg-dark border border-gray-700 rounded p-1.5 text-sm text-white focus:border-brand-500 outline-none"
-                                        >
-                                            <option value="">Select Player</option>
-                                            {participants.map(p => (
-                                                <option key={p.userId} value={p.userId}>{p.username} ({p.inGameId})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="w-24">
-                                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Prize</label>
-                                        <input 
-                                            type="number" 
-                                            value={winner.amount}
-                                            onChange={(e) => handleWinnerChange(index, 'amount', parseInt(e.target.value))}
-                                            className="w-full bg-dark border border-gray-700 rounded p-1.5 text-sm text-white focus:border-brand-500 outline-none"
-                                        />
-                                    </div>
-                                    <div className="flex items-end pb-1">
-                                        <button 
-                                            onClick={() => handleRemoveWinner(index)}
-                                            className="text-red-500 hover:text-red-400 p-1 transition"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+
+                            <div className="relative group">
+                                <div 
+                                    onPaste={handlePaste}
+                                    onDrop={handleDrop}
+                                    onDragOver={handleDragOver}
+                                    className={`
+                                        border-2 border-dashed rounded-3xl p-10 text-center transition-all duration-300 cursor-pointer
+                                        ${resultUrl ? 'border-green-500/50 bg-green-500/5' : 'border-gray-800 bg-dark group-hover:border-brand-500/50 group-hover:bg-brand-500/5'}
+                                        ${isProcessing ? 'border-brand-500 bg-brand-500/10' : ''}
+                                    `}
+                                >
+                                    <div className="flex flex-col items-center">
+                                        {isProcessing ? (
+                                            <div className="w-16 h-16 border-4 border-brand-500/30 border-t-brand-500 rounded-full animate-spin mb-4"></div>
+                                        ) : resultUrl ? (
+                                            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
+                                                <CheckCircle2 className="w-8 h-8 text-green-500" />
+                                            </div>
+                                        ) : (
+                                            <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                                <Upload className="w-8 h-8 text-gray-500 group-hover:text-brand-500" />
+                                            </div>
+                                        )}
+                                        <h3 className="text-white font-black uppercase tracking-wider">
+                                            {isProcessing ? 'Processing Image...' : resultUrl ? 'Image Processed' : 'Paste or Drop Match Result Image'}
+                                        </h3>
+                                        <p className="text-gray-500 text-xs mt-2 font-medium">PNG, JPG or WEBP (max. 5MB)</p>
                                     </div>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                )}
 
-                <div className="pt-4 border-t border-gray-700 flex gap-3">
+                            {resultUrl && (
+                                <motion.div 
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="relative rounded-2xl overflow-hidden border border-gray-800 shadow-2xl"
+                                >
+                                    <img src={resultUrl} alt="Result Preview" className="w-full h-48 object-cover" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
+                                        <span className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                            <CheckCircle2 className="w-4 h-4 text-green-500" /> Uploaded Successfully
+                                        </span>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </motion.div>
+                    ) : (
+                        <motion.div 
+                            key="manual"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-4"
+                        >
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                    <Trophy className="w-4 h-4 text-brand-500" /> Winners & Payouts
+                                </h4>
+                                <button 
+                                    onClick={handleAddWinner}
+                                    className="text-[10px] bg-brand-600/10 hover:bg-brand-600/20 text-brand-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all font-black uppercase tracking-wider border border-brand-500/20"
+                                >
+                                    <Plus className="w-3 h-3" /> Add Winner
+                                </button>
+                            </div>
+
+                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                {winners.map((winner, index) => (
+                                    <motion.div 
+                                        key={index}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        className="bg-surface p-4 rounded-2xl border border-gray-800 flex flex-col md:flex-row gap-4 relative group"
+                                    >
+                                        <div className="w-full md:w-20">
+                                            <label className="text-[10px] text-gray-500 uppercase font-black mb-1.5 block tracking-widest">Rank</label>
+                                            <div className="relative">
+                                                <Trophy className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand-500" />
+                                                <input 
+                                                    type="number" 
+                                                    value={isNaN(winner.rank) ? '' : winner.rank}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        handleWinnerChange(index, 'rank', isNaN(val) ? 0 : val);
+                                                    }}
+                                                    className="w-full bg-dark border border-gray-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white focus:border-brand-500 outline-none font-black"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="text-[10px] text-gray-500 uppercase font-black mb-1.5 block tracking-widest">Select Winner</label>
+                                            <div className="relative">
+                                                <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                                                <select 
+                                                    value={winner.uid}
+                                                    onChange={(e) => handleWinnerChange(index, 'uid', e.target.value)}
+                                                    className="w-full bg-dark border border-gray-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white focus:border-brand-500 outline-none font-bold appearance-none"
+                                                >
+                                                    <option value="">Select Player</option>
+                                                    {participants.map(p => (
+                                                        <option key={p.userId} value={p.userId}>{p.username} ({p.inGameId})</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="w-full md:w-32">
+                                            <label className="text-[10px] text-gray-500 uppercase font-black mb-1.5 block tracking-widest">Prize Amount</label>
+                                            <div className="relative">
+                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-green-500" />
+                                                <input 
+                                                    type="number" 
+                                                    value={isNaN(winner.amount) ? '' : winner.amount}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        handleWinnerChange(index, 'amount', isNaN(val) ? 0 : val);
+                                                    }}
+                                                    className="w-full bg-dark border border-gray-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white focus:border-brand-500 outline-none font-black"
+                                                />
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleRemoveWinner(index)}
+                                            className="absolute -top-2 -right-2 md:static md:mt-7 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-2.5 rounded-xl transition-all duration-300 border border-red-500/20"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <div className="pt-6 border-t border-gray-800 flex flex-col md:flex-row gap-3">
                     <button 
                         onClick={onClose}
-                        className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-bold transition"
+                        className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest transition-all active:scale-95"
                     >
                         Cancel
                     </button>
                     <button 
                         onClick={handleSubmit}
-                        disabled={loading || (activeTab === 'file' && !resultFile && !resultUrl) || (activeTab === 'manual' && winners.every(w => w.uid === ''))}
-                        className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition"
+                        disabled={loading || (activeTab === 'file' && !resultUrl) || (activeTab === 'manual' && winners.every(w => w.uid === ''))}
+                        className="flex-[2] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] hover:shadow-[0_0_25px_rgba(var(--brand-primary-rgb),0.4)]"
                     >
                         {loading ? (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
                         ) : (
                             <>
-                                <Save className="w-5 h-5" /> Finalize Results
+                                <Save className="w-6 h-6" /> Finalize & Pay Winners
                             </>
                         )}
                     </button>

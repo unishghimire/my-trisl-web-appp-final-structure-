@@ -18,7 +18,6 @@ const GamesBrowser: React.FC = () => {
             try {
                 const q = query(
                     collection(db, 'games'), 
-                    where('isPublished', '==', true),
                     orderBy('createdAt', 'desc')
                 );
                 const snap = await getDocs(q);

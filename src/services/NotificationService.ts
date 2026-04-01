@@ -47,6 +47,8 @@ export const NotificationService = {
         const q = query(collection(db, 'notifications'), where('userId', '==', userId), where('read', '==', false));
         return onSnapshot(q, (snapshot) => {
             callback(snapshot.size);
+        }, (error) => {
+            console.error("Error in onUnreadCount snapshot:", error);
         });
     },
 
@@ -60,6 +62,8 @@ export const NotificationService = {
         return onSnapshot(q, (snapshot) => {
             const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
             callback(notifications);
+        }, (error) => {
+            console.error("Error in onNotifications snapshot:", error);
         });
     },
 

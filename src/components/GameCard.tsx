@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Game } from '../types';
 import { motion } from 'motion/react';
 
@@ -7,6 +8,7 @@ interface GameCardProps {
 }
 
 const GameCard: React.FC<GameCardProps> = ({ game }) => {
+    const navigate = useNavigate();
     return (
         <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -39,7 +41,12 @@ const GameCard: React.FC<GameCardProps> = ({ game }) => {
                 </div>
                 <div className="pt-2 border-t border-gray-800 flex justify-between items-center">
                     <span className="text-xs text-gray-500 font-mono uppercase">Available Modes: {game.modes.length}</span>
-                    <button className="text-xs font-bold text-brand-500 hover:text-brand-400 uppercase tracking-wider transition">Explore</button>
+                    <button 
+                        onClick={() => navigate(`/games/${game.id}`)}
+                        className="text-xs font-bold text-brand-500 hover:text-brand-400 uppercase tracking-wider transition"
+                    >
+                        Explore
+                    </button>
                 </div>
             </div>
         </motion.div>

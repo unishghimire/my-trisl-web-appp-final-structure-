@@ -67,12 +67,12 @@ const Home: React.FC = () => {
 
     return (
         <div className="animate-fade-in">
-            <section id="hero-slider" className="relative rounded-2xl overflow-hidden bg-gray-900 mb-12 border border-gray-800 shadow-2xl h-[400px]">
+            <section id="hero-slider" className="relative rounded-2xl overflow-hidden bg-gray-900 mb-12 border border-gray-800 shadow-2xl h-[300px] md:h-[400px]">
                 <div className="absolute inset-0 bg-gradient-to-r from-brand-900/90 to-transparent z-10"></div>
                 <div id="slides-container">
                     {slides.length === 0 ? (
                         <div className="slide active">
-                            <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1600" className="w-full h-[400px] object-cover opacity-60" alt="Default Hero" />
+                            <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1600" className="w-full h-full object-cover opacity-60" alt="Default Hero" />
                             <div className="absolute inset-0 flex flex-col justify-center px-8 md:px-16 z-20">
                                 <h1 className="text-4xl md:text-6xl font-bold mb-4 neon-text text-white">WELCOME TO NEXPLAY</h1>
                                 <p className="text-gray-300">Nepal's #1 Esports Platform</p>
@@ -81,7 +81,7 @@ const Home: React.FC = () => {
                     ) : (
                         slides.map((slide, index) => (
                             <div key={slide.id} className={`slide ${index === currentSlide ? 'active' : ''}`}>
-                                <img src={slide.imageUrl} className="w-full h-[400px] object-cover opacity-60" alt={slide.title} />
+                                <img src={slide.imageUrl} className="w-full h-full object-cover opacity-60" alt={slide.title} />
                                 <div className="absolute inset-0 flex flex-col justify-center px-8 md:px-16 z-20">
                                     <h1 className="text-4xl md:text-6xl font-bold mb-4 neon-text text-white uppercase">{slide.title}</h1>
                                     <div className="flex gap-4">

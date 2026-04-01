@@ -8,14 +8,21 @@ export interface UserProfile {
     balance: number;
     totalEarnings: number;
     inGameId: string;
+    inGameName?: string;
     teamName: string;
+    teamId?: string;
     phone: string;
     isBanned: boolean;
     createdAt: Timestamp | any;
     orgStatus?: 'pending' | 'approved' | 'rejected';
     bio?: string;
     profilePicUrl?: string;
+    bannerUrl?: string;
     contactInfo?: string;
+    skills?: string[];
+    status?: 'online' | 'idle' | 'dnd' | 'offline';
+    customActivity?: string;
+    lastActive?: Timestamp | any;
 }
 
 export interface Tournament {
@@ -29,6 +36,9 @@ export interface Tournament {
     slots: number;
     currentPlayers: number;
     type: string;
+    teamSize: number;
+    teamType: 'solo' | 'duo' | 'squad';
+    map?: string;
     startTime: Timestamp | any;
     rules?: string;
     status: 'upcoming' | 'live' | 'completed';
@@ -93,10 +103,49 @@ export interface Notification {
     userId: string;
     title: string;
     message: string;
-    type: 'info' | 'success' | 'warning' | 'alert';
+    type: 'info' | 'success' | 'warning' | 'alert' | 'invite';
     read: boolean;
     link?: string;
     timestamp: Timestamp | any;
+}
+
+export interface Team {
+    id: string;
+    name: string;
+    description: string;
+    logoUrl?: string;
+    bannerUrl?: string;
+    ownerId: string;
+    createdAt: Timestamp | any;
+}
+
+export interface TeamMember {
+    id: string;
+    teamId: string;
+    userId: string;
+    role: 'admin' | 'moderator' | 'member';
+    joinedAt: Timestamp | any;
+    user?: UserProfile; // Optional joined data
+}
+
+export interface TeamInvite {
+    id: string;
+    teamId: string;
+    teamName: string;
+    inviterId: string;
+    inviteeId: string;
+    status: 'pending' | 'accepted' | 'declined';
+    createdAt: Timestamp | any;
+}
+
+export interface TeamActivity {
+    id: string;
+    teamId: string;
+    userId: string;
+    userName: string;
+    action: string;
+    details?: string;
+    createdAt: Timestamp | any;
 }
 
 export interface Game {
@@ -115,4 +164,26 @@ export interface SiteSettings {
     notice: string;
     isNoticeActive: boolean;
     updatedAt: Timestamp | any;
+}
+
+export interface Participant {
+    id: string;
+    userId: string;
+    tournamentId: string;
+    username: string;
+    inGameId: string;
+    teamName: string;
+    teamId?: string;
+    teammates?: string[];
+    timestamp: Timestamp | any;
+}
+
+export interface Media {
+    id: string;
+    userId: string;
+    url: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    createdAt: Timestamp | any;
 }

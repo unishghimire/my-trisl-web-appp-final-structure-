@@ -5,12 +5,14 @@ import { useAuth } from '../context/AuthContext';
 import { Tournament, SiteSettings } from '../types';
 import { formatCurrency, timeAgo } from '../utils';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, Eye, Upload, BarChart, User, Shield, AlertTriangle } from 'lucide-react';
+import { Trophy, Eye, Upload, BarChart, User, Shield, AlertTriangle, Users } from 'lucide-react';
 import ResultUploadModal from '../components/ResultUploadModal';
+import { Team } from '../types';
 
 const Dashboard: React.FC = () => {
     const { user, profile } = useAuth();
-    const [myTournaments, setMyTournaments] = useState<(Tournament & { role: 'participant' | 'organizer' })[]>([]);
+    const [myTournaments, setMyTournaments] = useState<(Tournament & { role: 'participant' | 'organizer'; registration?: any })[]>([]);
+    const [myTeams, setMyTeams] = useState<Team[]>([]);
     const [settings, setSettings] = useState<SiteSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
@@ -27,23 +29,29 @@ const Dashboard: React.FC = () => {
                 orderBy('timestamp', 'desc')
             ));
             
-            const tourIds = partSnap.docs.map(d => d.data().tournamentId);
-            const tourPromises = tourIds.map(id => getDoc(doc(db, 'tournaments', id)));
-            const tourSnaps = await Promise.all(tourPromises);
-            
-            const joinedTours = tourSnaps
-                .filter(s => s.exists())
-                .map(s => ({ id: s.id, ...s.data(), role: 'participant' } as Tournament & { role: 'participant' | 'organizer' }));
+            const joinedTours: (Tournament & { role: 'participant' | 'organizer'; registration?: any })[] = [];
+            for (const pDoc of partSnap.docs) {
+                const pData = pDoc.data();
+                const tDoc = await getDoc(doc(db, 'tournaments', pData.tournamentId));
+                if (tDoc.exists()) {
+                    joinedTours.push({ 
+                        id: tDoc.id, 
+                        ...tDoc.data(), 
+                        role: 'participant',
+                        registration: pData 
+                    } as Tournament & { role: 'participant' | 'organizer'; registration?: any });
+                }
+            }
 
             // Fetch Hosted Tournaments if organizer/admin
-            let hostedTours: (Tournament & { role: 'participant' | 'organizer' })[] = [];
+            let hostedTours: (Tournament & { role: 'participant' | 'organizer'; registration?: any })[] = [];
             if (profile?.role === 'organizer' || profile?.role === 'admin') {
                 const hostedSnap = await getDocs(query(
                     collection(db, 'tournaments'),
                     where('hostUid', '==', user.uid),
                     orderBy('createdAt', 'desc')
                 ));
-                hostedTours = hostedSnap.docs.map(d => ({ id: d.id, ...d.data(), role: 'organizer' } as Tournament & { role: 'participant' | 'organizer' }));
+                hostedTours = hostedSnap.docs.map(d => ({ id: d.id, ...d.data(), role: 'organizer' } as Tournament & { role: 'participant' | 'organizer'; registration?: any }));
             }
 
             // Merge and remove duplicates (if any)
@@ -53,6 +61,22 @@ const Dashboard: React.FC = () => {
             );
             
             setMyTournaments(uniqueTours);
+
+            // Fetch My Teams
+            const memberQ = query(collection(db, 'team_members'), where('userId', '==', user.uid));
+            const memberSnap = await getDocs(memberQ);
+            const myTeamIds = memberSnap.docs.map(d => d.data().teamId);
+            
+            if (myTeamIds.length > 0) {
+                const teamsData: Team[] = [];
+                for (const teamId of myTeamIds) {
+                    const teamDoc = await getDoc(doc(db, 'teams', teamId));
+                    if (teamDoc.exists()) {
+                        teamsData.push({ id: teamDoc.id, ...teamDoc.data() } as Team);
+                    }
+                }
+                setMyTeams(teamsData);
+            }
 
             // Fetch Site Settings
             const settingsSnap = await getDoc(doc(db, 'settings', 'site'));
@@ -77,9 +101,9 @@ const Dashboard: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh]">
-                <div className="loader mb-4"></div>
-                <p className="text-brand-500 text-sm animate-pulse font-mono">ESTABLISHING UPLINK...</p>
+            <div className="min-h-[60vh] flex flex-col items-center justify-center">
+                <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-xs text-gray-500 font-black uppercase tracking-widest">Loading Dashboard...</p>
             </div>
         );
     }
@@ -98,6 +122,29 @@ const Dashboard: React.FC = () => {
             )}
 
             <h2 className="text-2xl font-bold mb-6 text-white border-b border-gray-800 pb-4">My Dashboard</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div onClick={() => navigate('/profile')} className="bg-card p-6 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
+                        <User className="w-6 h-6 text-brand-500" />
+                    </div>
+                    <div>
+                        <h3 className="text-white font-black uppercase tracking-widest text-sm group-hover:text-brand-400 transition">My Profile</h3>
+                        <p className="text-gray-500 text-xs font-bold">Manage your account</p>
+                    </div>
+                </div>
+                <div onClick={() => navigate('/teams')} className="bg-card p-6 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
+                        <Users className="w-6 h-6 text-brand-500" />
+                    </div>
+                    <div>
+                        <h3 className="text-white font-black uppercase tracking-widest text-sm group-hover:text-brand-400 transition">My Teams</h3>
+                        <p className="text-gray-500 text-xs font-bold">{myTeams.length} Active Teams</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3 className="text-xl font-bold mb-4 text-white uppercase tracking-widest">My Tournaments</h3>
             <div className="space-y-4">
                 {myTournaments.length > 0 ? (
                     myTournaments.map(t => {
@@ -113,7 +160,7 @@ const Dashboard: React.FC = () => {
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-2">
                                         <div>
-                                            <div className="flex items-center gap-2 mb-1">
+                                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                                                 {t.role === 'organizer' ? (
                                                     <span className="bg-brand-900/50 text-brand-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-brand-500/30 flex items-center gap-1">
                                                         <Shield className="w-2.5 h-2.5" /> HOST
@@ -123,6 +170,9 @@ const Dashboard: React.FC = () => {
                                                         <User className="w-2.5 h-2.5" /> PLAYER
                                                     </span>
                                                 )}
+                                                <span className="bg-gray-800 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-700">{t.game}</span>
+                                                <span className="bg-brand-600/20 text-brand-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-brand-500/20 uppercase">{t.teamType}</span>
+                                                <span className="bg-blue-600/20 text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-500/20 uppercase">{t.type}</span>
                                             </div>
                                             <h3 
                                                 className="font-bold text-lg text-white group-hover:text-brand-400 transition cursor-pointer" 
@@ -130,6 +180,28 @@ const Dashboard: React.FC = () => {
                                             >
                                                 {t.title}
                                             </h3>
+                                            {t.registration && (
+                                                <div className="flex flex-col gap-1 mt-1">
+                                                    <div className="flex gap-4">
+                                                        <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">
+                                                            Team: <span className="text-brand-400">{t.registration.teamName || 'SOLO'}</span>
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">
+                                                            UID: <span className="text-brand-400">{t.registration.inGameId}</span>
+                                                        </div>
+                                                        {t.registration.inGameName && (
+                                                            <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">
+                                                                IGN: <span className="text-brand-400">{t.registration.inGameName}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {t.registration.teammates && t.registration.teammates.length > 0 && (
+                                                        <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">
+                                                            Teammates: <span className="text-brand-400">{t.registration.teammates.join(', ')}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                             <div className={`text-xs uppercase tracking-wide ${isLive ? 'text-red-500 animate-pulse font-bold' : isCompleted ? 'text-green-500' : 'text-blue-400'}`}>
                                                 {t.status}
                                             </div>
@@ -161,7 +233,10 @@ const Dashboard: React.FC = () => {
                                             </button>
                                         )}
                                         {isCompleted && (
-                                            <button className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1">
+                                            <button 
+                                                onClick={() => navigate(`/details/${t.id}?tab=results`)}
+                                                className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1"
+                                            >
                                                 <BarChart className="w-4 h-4" /> View Result
                                             </button>
                                         )}
