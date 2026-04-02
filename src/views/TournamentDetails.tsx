@@ -302,6 +302,7 @@ const TournamentDetails: React.FC = () => {
     const bannerUrl = tournament.bannerUrl || DEFAULT_BANNER;
     const bannerStyle = { backgroundImage: `url('${bannerUrl}')`, backgroundSize: 'cover', backgroundPosition: 'center' };
     const showRoom = isJoined && (tournament.status === 'live' || (tournament.roomId && tournament.status === 'upcoming'));
+    console.log("Debug showRoom:", { showRoom, isJoined, status: tournament.status, roomId: tournament.roomId });
     const ytId = getYoutubeId(tournament.ytLink);
 
     return (
@@ -450,7 +451,10 @@ const TournamentDetails: React.FC = () => {
                                                 <div className="text-white font-mono text-xl flex justify-between items-center">
                                                     {showPassword ? (tournament.roomPass || '---') : '••••••'}
                                                     <div className="flex items-center">
-                                                        <button onClick={() => setShowPassword(!showPassword)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                                        <button onClick={() => {
+                                                            console.log("Password toggle clicked. Current state:", showPassword);
+                                                            setShowPassword(!showPassword);
+                                                        }} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                                                             {showPassword ? <EyeOff className="w-4 h-4 text-gray-500" /> : <Eye className="w-4 h-4 text-gray-500" />}
                                                         </button>
                                                         <button onClick={() => {
