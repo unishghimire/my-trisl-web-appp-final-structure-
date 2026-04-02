@@ -26,7 +26,7 @@ const Login: React.FC = () => {
         try {
             await signInWithEmailAndPassword(auth, email, password);
             showToast('Welcome back!', 'success');
-            navigate('/dashboard');
+            navigate('/');
         } catch (err: any) {
             console.error('Login error:', err);
             setError(err.message || 'Login failed');
@@ -43,7 +43,7 @@ const Login: React.FC = () => {
         try {
             await signInWithPopup(auth, googleProvider);
             showToast('Welcome back!', 'success');
-            navigate('/dashboard');
+            navigate('/');
         } catch (err: any) {
             console.error('Google Sign-In error:', err);
             setError(err.message || 'Google Sign-In failed');
