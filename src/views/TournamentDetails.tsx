@@ -203,6 +203,13 @@ const TournamentDetails: React.FC = () => {
             return;
         }
 
+        // Requirement: Team ID is compulsory for team tournaments
+        if ((tournament.teamType === 'duo' || tournament.teamType === 'squad') && !profile.teamId) {
+            showToast("You must be in a team to join team tournaments!", "warning");
+            navigate('/teams');
+            return;
+        }
+
         if (tournament.teamType === 'duo' || tournament.teamType === 'squad') {
             setShowJoinModal(true);
         } else {
@@ -451,10 +458,10 @@ const TournamentDetails: React.FC = () => {
                                                 <div className="text-white font-mono text-xl flex justify-between items-center">
                                                     {showPassword ? (tournament.roomPass || '---') : '••••••'}
                                                     <div className="flex items-center">
-                                                        <button onClick={() => {
-                                                            console.log("Password toggle clicked. Current state:", showPassword);
-                                                            setShowPassword(!showPassword);
-                                                        }} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                                        <button 
+                                                            onClick={() => setShowPassword(!showPassword)} 
+                                                            className="p-2 hover:bg-white/10 rounded-lg transition-colors relative z-20"
+                                                        >
                                                             {showPassword ? <EyeOff className="w-4 h-4 text-gray-500" /> : <Eye className="w-4 h-4 text-gray-500" />}
                                                         </button>
                                                         <button onClick={() => {
