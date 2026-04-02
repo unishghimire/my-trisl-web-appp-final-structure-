@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
 import { NotificationService } from '../services/NotificationService';
 import { useNotification } from '../context/NotificationContext';
+import ProfileLink from '../components/ProfileLink';
 
 const TournamentDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -34,6 +35,20 @@ const TournamentDetails: React.FC = () => {
     const [teammate3, setTeammate3] = useState('');
     const [teamMembers, setTeamMembers] = useState<any[]>([]);
     const [showPassword, setShowPassword] = useState(false);
+    const [hostProfile, setHostProfile] = useState<UserProfile | null>(null);
+
+    useEffect(() => {
+        const fetchHostProfile = async () => {
+            if (tournament?.hostUid) {
+                const docRef = doc(db, 'users_public', tournament.hostUid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setHostProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
+                }
+            }
+        };
+        fetchHostProfile();
+    }, [tournament?.hostUid]);
 
     useEffect(() => {
         const fetchTeamMembers = async () => {
@@ -65,8 +80,13 @@ const TournamentDetails: React.FC = () => {
     useEffect(() => {
         if (!tournament?.startTime) return;
 
+        const start = new Date(tournament.startTime).getTime();
+        if (isNaN(start)) {
+            console.error("Invalid tournament start time:", tournament.startTime);
+            return;
+        }
+
         const timer = setInterval(() => {
-            const start = new Date(tournament.startTime).getTime();
             const now = new Date().getTime();
             const diff = start - now;
 
@@ -352,6 +372,9 @@ const TournamentDetails: React.FC = () => {
                     >
                         {tournament.title}
                     </motion.h1>
+                    <div className="text-gray-300 font-bold text-sm mb-4">
+                        Organized by: {tournament.hostUid ? <ProfileLink to={`/organization/${tournament.hostUid}`} name={tournament.hostName || 'Official Host'} /> : <span className="text-gray-500">Organization not available</span>}
+                    </div>
                     
                     <div className="flex flex-wrap items-center gap-6 text-gray-300 font-bold text-sm">
                         <div className="flex items-center gap-2">
@@ -414,6 +437,18 @@ const TournamentDetails: React.FC = () => {
                                             allowFullScreen 
                                             className="w-full h-full"
                                         ></iframe>
+                                    </div>
+                                )}
+                                {tournament.ytLink && (
+                                    <div className="flex justify-center">
+                                        <a 
+                                            href={tournament.ytLink} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-brand-500 hover:text-brand-400 font-bold text-sm transition"
+                                        >
+                                            <Play className="w-4 h-4 fill-current" /> Visit YouTube Channel
+                                        </a>
                                     </div>
                                 )}
 
@@ -491,9 +526,25 @@ const TournamentDetails: React.FC = () => {
                                     <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
                                         <Building2 className="w-6 h-6 text-brand-500" /> Organization
                                     </h3>
-                                    <Link to={`/profile/${tournament.hostUid}`} className="text-brand-400 font-bold hover:underline">
-                                        {tournament.hostName || 'Official Host'}
-                                    </Link>
+                                    {hostProfile ? (
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-16 h-16 rounded-2xl bg-dark border border-gray-700 overflow-hidden flex items-center justify-center">
+                                                {hostProfile.profilePicUrl ? (
+                                                    <img src={hostProfile.profilePicUrl} alt={hostProfile.username} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <Building2 className="w-8 h-8 text-gray-600" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <div className="text-white font-black text-lg">
+                                                    <ProfileLink to={`/organization/${tournament.hostUid}`} name={hostProfile.username} />
+                                                </div>
+                                                <p className="text-gray-400 text-xs mt-1 line-clamp-2">{hostProfile.bio || 'No bio available.'}</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <ProfileLink to={`/organization/${tournament.hostUid}`} name={tournament.hostName || 'Official Host'} />
+                                    )}
                                 </div>
                                 <div className="bg-surface p-8 rounded-3xl border border-gray-800">
                                     <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
@@ -550,7 +601,9 @@ const TournamentDetails: React.FC = () => {
                                                     {i + 1}
                                                 </div>
                                                 <div className="flex flex-col gap-2">
-                                                    <div className="text-white font-black text-lg leading-none">{p.username}</div>
+                                                    <div className="text-white font-black text-lg leading-none">
+                                                        <ProfileLink to={`/profile/${p.userId}`} name={p.username} />
+                                                    </div>
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <div className="flex items-center gap-1.5 bg-dark px-2 py-1 rounded-lg border border-gray-800">
                                                             <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest">UID:</span>
@@ -574,7 +627,7 @@ const TournamentDetails: React.FC = () => {
                                             <div className="text-left sm:text-right bg-dark sm:bg-transparent p-3 sm:p-0 rounded-xl sm:rounded-none border border-gray-800 sm:border-none">
                                                 <div className="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-1">Team Name</div>
                                                 <div className={`inline-block px-3 py-1 rounded-lg text-xs font-black uppercase tracking-tight ${p.teamName ? 'bg-brand-600/20 text-brand-400 border border-brand-500/20' : 'bg-gray-800 text-gray-500'}`}>
-                                                    {p.teamName || 'SOLO PLAYER'}
+                                                    {p.teamId ? <ProfileLink to={`/team/${p.teamId}`} name={p.teamName || 'TEAM'} /> : (p.teamName || 'SOLO PLAYER')}
                                                 </div>
                                             </div>
                                         </div>
@@ -753,9 +806,6 @@ const TournamentDetails: React.FC = () => {
                             </button>
                         ) : isJoined ? (
                             <div className="space-y-3">
-                                <div className="w-full bg-green-500/10 text-green-500 border border-green-500/30 py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3">
-                                    <CheckCircle2 className="w-6 h-6" /> Registered
-                                </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button 
                                         onClick={() => setActiveTab('overview')}

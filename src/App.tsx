@@ -65,6 +65,8 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfile /></ProtectedRoute>} />
             <Route path="/user/:id" element={<PublicProfile />} />
+            <Route path="/profile/:id" element={<PublicProfile />} />
+            <Route path="/organization/:id" element={<PublicProfile />} />
             <Route path="/organizations" element={<OrgBrowser />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/team/:id" element={<TeamDetails />} />
