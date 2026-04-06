@@ -184,7 +184,7 @@ const Teams: React.FC = () => {
                                     ) : (
                                         <>
                                             <img 
-                                                src={newTeamLogo || DEFAULT_TEAM_LOGO} 
+                                                src={newTeamLogo || DEFAULT_TEAM_LOGO || undefined} 
                                                 alt="Team Logo Preview" 
                                                 className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
                                                 onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
@@ -254,7 +254,7 @@ const Teams: React.FC = () => {
                                 <div className="flex items-center gap-4 mb-4">
                                     <div className="w-16 h-16 rounded-xl bg-dark border border-gray-700 overflow-hidden flex items-center justify-center">
                                         <img 
-                                            src={team.logoUrl || DEFAULT_TEAM_LOGO} 
+                                            src={team.logoUrl || DEFAULT_TEAM_LOGO || undefined} 
                                             alt={team.name} 
                                             className="w-full h-full object-cover" 
                                             referrerPolicy="no-referrer"
@@ -305,7 +305,7 @@ const Teams: React.FC = () => {
                                 <div className="flex items-center gap-4 mb-4">
                                     <div className="w-16 h-16 rounded-xl bg-dark border border-gray-700 overflow-hidden flex items-center justify-center shrink-0">
                                         <img 
-                                            src={team.logoUrl || DEFAULT_TEAM_LOGO} 
+                                            src={team.logoUrl || DEFAULT_TEAM_LOGO || undefined} 
                                             alt={team.name} 
                                             className="w-full h-full object-cover" 
                                             referrerPolicy="no-referrer"

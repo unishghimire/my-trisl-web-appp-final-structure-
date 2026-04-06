@@ -1,7 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
 import Breadcrumbs from './components/Breadcrumbs';
 import Footer from './components/Footer';
@@ -25,6 +27,7 @@ import OrgBrowser from './views/OrgBrowser';
 import PublicProfile from './views/PublicProfile';
 import ProfileCompletionGuard from './components/ProfileCompletionGuard';
 import CompleteProfile from './views/CompleteProfile';
+import PostDetails from './views/PostDetails';
 import Toast, { ToastType } from './components/Toast';
 import GamesBrowser from './views/GamesBrowser';
 import GameModesBrowser from './views/GameModesBrowser';
@@ -60,6 +63,7 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
             <Route path="/games" element={<GamesBrowser />} />
             <Route path="/games/:id" element={<GameModesBrowser />} />
             <Route path="/details/:id" element={<TournamentDetails />} />
+            <Route path="/post/:id" element={<PostDetails />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
@@ -104,12 +108,16 @@ export default function App() {
   }, []);
 
   return (
-    <AuthProvider>
-      <NotificationProvider>
-        <Router>
-          <AppContent toasts={toasts} removeToast={removeToast} />
-        </Router>
-      </NotificationProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <HelmetProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <Router>
+              <AppContent toasts={toasts} removeToast={removeToast} />
+            </Router>
+          </NotificationProvider>
+        </AuthProvider>
+      </HelmetProvider>
+    </ErrorBoundary>
   );
 }

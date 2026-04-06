@@ -131,7 +131,7 @@ const OrgBrowser: React.FC = () => {
                                 {suggestions.map(org => (
                                     <div key={org.uid} className="bg-card rounded-2xl border border-gray-800 p-6 shadow-lg backdrop-blur-md bg-white/5 flex flex-col">
                                         <div className="flex items-center gap-4 mb-4">
-                                            <img src={org.profilePicture} alt={org.username} className="w-16 h-16 rounded-xl bg-dark border border-gray-700" />
+                                            <img src={org.profilePicture || undefined} alt={org.username} className="w-16 h-16 rounded-xl bg-dark border border-gray-700" />
                                             <h3 className="text-lg font-black text-white">{org.username}</h3>
                                         </div>
                                         <div className="flex gap-2 mt-auto">
@@ -160,7 +160,7 @@ const OrgBrowser: React.FC = () => {
                         {filteredOrgs.map(org => (
                             <div key={org.uid} className="bg-card rounded-2xl border border-gray-800 p-6 shadow-lg backdrop-blur-md bg-white/5 flex flex-col">
                                 <div className="flex items-center gap-4 mb-4">
-                                    <img src={org.profilePicture} alt={org.username} className="w-16 h-16 rounded-xl bg-dark border border-gray-700" />
+                                    <img src={org.profilePicture || undefined} alt={org.username} className="w-16 h-16 rounded-xl bg-dark border border-gray-700" />
                                     <h3 className="text-lg font-black text-white">{org.username}</h3>
                                 </div>
                                 <div className="flex gap-2 mt-auto">

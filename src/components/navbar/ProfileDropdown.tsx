@@ -31,7 +31,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, 
         className="flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-700 whitespace-nowrap"
       >
         <div className="w-6 h-6 bg-brand-700 rounded-full flex items-center justify-center font-bold text-xs">
-          {avatarUrl ? <img src={avatarUrl} className="w-full h-full rounded-full object-cover" alt="Avatar" /> : username[0].toUpperCase()}
+          {avatarUrl ? <img src={avatarUrl || undefined} className="w-full h-full rounded-full object-cover" alt="Avatar" /> : username[0].toUpperCase()}
         </div>
         <span className="hidden md:block truncate max-w-[80px]">{username}</span>
         <ChevronDown className="w-4 h-4" />

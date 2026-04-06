@@ -226,7 +226,7 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
                                     animate={{ opacity: 1, scale: 1 }}
                                     className="relative rounded-2xl overflow-hidden border border-gray-800 shadow-2xl"
                                 >
-                                    <img src={resultUrl} alt="Result Preview" className="w-full h-48 object-cover" />
+                                    <img src={resultUrl || undefined} alt="Result Preview" className="w-full h-48 object-cover" />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
                                         <span className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
                                             <CheckCircle2 className="w-4 h-4 text-green-500" /> Uploaded Successfully

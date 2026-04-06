@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
 import { NotificationService } from '../services/NotificationService';
 import { useNotification } from '../context/NotificationContext';
+import { Helmet } from 'react-helmet-async';
 import ProfileLink from '../components/ProfileLink';
 
 const TournamentDetails: React.FC = () => {
@@ -38,17 +39,89 @@ const TournamentDetails: React.FC = () => {
     const [hostProfile, setHostProfile] = useState<UserProfile | null>(null);
 
     useEffect(() => {
-        const fetchHostProfile = async () => {
-            if (tournament?.hostUid) {
-                const docRef = doc(db, 'users_public', tournament.hostUid);
+        const fetchAllData = async () => {
+            if (!id) return;
+            setLoading(true);
+            try {
+                // 1. Fetch Tournament Details
+                const docRef = doc(db, 'tournaments', id);
                 const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setHostProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
+                
+                if (!docSnap.exists()) {
+                    setLoading(false);
+                    return;
                 }
+                
+                const tData = { id: docSnap.id, ...docSnap.data() } as Tournament;
+                setTournament(tData);
+
+                // 2. Fetch related data concurrently
+                const promises: Promise<any>[] = [];
+
+                // Participants
+                const partQ = query(collection(db, 'participants'), where('tournamentId', '==', id));
+                promises.push(getDocs(partQ).then(snap => setParticipants(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+                // Related Tournaments
+                if (tData.game) {
+                    const relQ = query(
+                        collection(db, 'tournaments'), 
+                        where('status', '==', 'upcoming'),
+                        where('game', '==', tData.game)
+                    );
+                    promises.push(getDocs(relQ).then(snap => {
+                        const other = snap.docs
+                            .map(d => ({ id: d.id, ...d.data() } as Tournament))
+                            .filter(t => t.id !== tData.id)
+                            .slice(0, 3);
+                        setRelatedTournaments(other);
+                    }));
+                }
+
+                // Host Profile
+                if (tData.hostUid) {
+                    const hostRef = doc(db, 'users_public', tData.hostUid);
+                    promises.push(getDoc(hostRef).then(snap => {
+                        if (snap.exists()) {
+                            setHostProfile({ uid: snap.id, ...snap.data() } as UserProfile);
+                        }
+                    }));
+                }
+
+                // User Join Status
+                if (user) {
+                    const userJoinQ = query(
+                        collection(db, 'participants'),
+                        where('tournamentId', '==', id),
+                        where('userId', '==', user.uid)
+                    );
+                    promises.push(getDocs(userJoinQ).then(async (pSnap) => {
+                        let joined = !pSnap.empty;
+                        if (!joined && profile?.teamId) {
+                            const teamSnap = await getDocs(query(
+                                collection(db, 'participants'),
+                                where('tournamentId', '==', id),
+                                where('teamId', '==', profile.teamId)
+                            ));
+                            if (!teamSnap.empty) {
+                                joined = true;
+                            }
+                        }
+                        setIsJoined(joined);
+                    }));
+                }
+
+                await Promise.all(promises);
+
+            } catch (error) {
+                console.error("Error fetching tournament data:", error);
+            } finally {
+                setLoading(false);
             }
         };
-        fetchHostProfile();
-    }, [tournament?.hostUid]);
+
+        fetchAllData();
+    }, [id, user, profile?.teamId]);
 
     useEffect(() => {
         const fetchTeamMembers = async () => {
@@ -107,93 +180,12 @@ const TournamentDetails: React.FC = () => {
         return () => clearInterval(timer);
     }, [tournament?.startTime]);
 
-    useEffect(() => {
-        const fetchParticipants = async () => {
-            if (!id) return;
-            try {
-                const q = query(collection(db, 'participants'), where('tournamentId', '==', id));
-                const snap = await getDocs(q);
-                setParticipants(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            } catch (error) {
-                console.error("Error fetching participants:", error);
-            }
-        };
-
-        if (id) fetchParticipants();
-    }, [id]);
-
-    useEffect(() => {
-        const fetchRelated = async () => {
-            if (!tournament) return;
-            try {
-                const q = query(
-                    collection(db, 'tournaments'), 
-                    where('status', '==', 'upcoming'),
-                    where('game', '==', tournament.game)
-                );
-                const snap = await getDocs(q);
-                const other = snap.docs
-                    .map(d => ({ id: d.id, ...d.data() } as Tournament))
-                    .filter(t => t.id !== tournament.id)
-                    .slice(0, 3);
-                setRelatedTournaments(other);
-            } catch (error) {
-                console.error("Error fetching related tournaments:", error);
-            }
-        };
-
-        if (tournament) fetchRelated();
-    }, [tournament]);
-
     const filteredParticipants = participants.filter(p => 
         p.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.inGameId.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.teamName && p.teamName.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (p.teammates && p.teammates.some((tm: string) => tm.toLowerCase().includes(searchTerm.toLowerCase())))
     );
-    useEffect(() => {
-        const fetchDetails = async () => {
-            if (!id) return;
-            try {
-                const docRef = doc(db, 'tournaments', id);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setTournament({ id: docSnap.id, ...docSnap.data() } as Tournament);
-                    
-                    if (user) {
-                        // Check if user is joined
-                        const pSnap = await getDocs(query(
-                            collection(db, 'participants'),
-                            where('tournamentId', '==', id),
-                            where('userId', '==', user.uid)
-                        ));
-                        
-                        let joined = !pSnap.empty;
-
-                        // Check if team is joined
-                        if (!joined && profile?.teamId) {
-                            const teamSnap = await getDocs(query(
-                                collection(db, 'participants'),
-                                where('tournamentId', '==', id),
-                                where('teamId', '==', profile.teamId)
-                            ));
-                            if (!teamSnap.empty) {
-                                joined = true;
-                            }
-                        }
-
-                        setIsJoined(joined);
-                    }
-                }
-            } catch (error) {
-                console.error("Error fetching tournament details:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDetails();
-    }, [id, user]);
 
     const handleJoinClick = () => {
         if (!user) {
@@ -334,6 +326,12 @@ const TournamentDetails: React.FC = () => {
 
     return (
         <div className="animate-fade-in max-w-6xl mx-auto px-4 py-6">
+            {tournament && (
+                <Helmet>
+                    <title>{tournament.title} | NexPlay</title>
+                    <meta name="description" content={`Join ${tournament.title} on NexPlay. Prize Pool: ${formatCurrency(tournament.prizePool)}.`} />
+                </Helmet>
+            )}
             {/* Hero Section */}
             <div className="relative h-[300px] md:h-[450px] rounded-3xl overflow-hidden mb-8 shadow-2xl group">
                 <div className="absolute inset-0 transition-transform duration-700 group-hover:scale-105" style={bannerStyle}></div>
@@ -359,7 +357,8 @@ const TournamentDetails: React.FC = () => {
 
                 <button 
                     onClick={handleShare}
-                    className="absolute top-6 right-6 p-3 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white rounded-full transition-all border border-white/10 active:scale-90"
+                    aria-label="Share Tournament"
+                    className="absolute top-6 right-6 p-3 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white rounded-full transition-all border border-white/10 active:scale-90 z-20"
                 >
                     <Share2 className="w-5 h-5" />
                 </button>
@@ -530,7 +529,7 @@ const TournamentDetails: React.FC = () => {
                                         <div className="flex items-center gap-4">
                                             <div className="w-16 h-16 rounded-2xl bg-dark border border-gray-700 overflow-hidden flex items-center justify-center">
                                                 {hostProfile.profilePicUrl ? (
-                                                    <img src={hostProfile.profilePicUrl} alt={hostProfile.username} className="w-full h-full object-cover" />
+                                                    <img src={hostProfile.profilePicUrl || undefined} alt={hostProfile.username} className="w-full h-full object-cover" />
                                                 ) : (
                                                     <Building2 className="w-8 h-8 text-gray-600" />
                                                 )}
@@ -688,7 +687,7 @@ const TournamentDetails: React.FC = () => {
                                             <div className="space-y-3">
                                                 <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest ml-1">Official Results</h4>
                                                 <div className="rounded-3xl overflow-hidden border border-gray-800 shadow-2xl">
-                                                    <img src={tournament.resultUrl} alt="Match Results" className="w-full h-auto" />
+                                                    <img src={tournament.resultUrl || undefined} alt="Match Results" className="w-full h-auto" />
                                                 </div>
                                             </div>
                                         )}
@@ -721,7 +720,7 @@ const TournamentDetails: React.FC = () => {
                                     >
                                         <div className="h-24 overflow-hidden relative">
                                             <img 
-                                                src={t.bannerUrl || DEFAULT_BANNER} 
+                                                src={t.bannerUrl || DEFAULT_BANNER || undefined} 
                                                 alt={t.title}
                                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                             />

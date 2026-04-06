@@ -301,7 +301,7 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
                       ) : (
                         <>
                           <img 
-                            src={formData.bannerUrl || DEFAULT_BANNER} 
+                            src={formData.bannerUrl || DEFAULT_BANNER || undefined} 
                             alt="Banner Preview" 
                             className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
                             onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
@@ -338,7 +338,7 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
                         onClick={() => setFormData({...formData, bannerUrl: url})}
                         className={`relative aspect-[3/1] rounded overflow-hidden border-2 transition-all ${formData.bannerUrl === url ? 'border-brand-500' : 'border-transparent hover:border-gray-600'}`}
                       >
-                        <img src={url} alt={`Preset ${idx + 1}`} className="w-full h-full object-cover" />
+                        <img src={url || undefined} alt={`Preset ${idx + 1}`} className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>

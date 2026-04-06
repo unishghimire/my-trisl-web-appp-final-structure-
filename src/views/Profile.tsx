@@ -342,7 +342,7 @@ const Profile: React.FC = () => {
                         <div className="relative group flex flex-col items-center gap-2">
                             <div className="w-32 h-32 rounded-2xl border-4 border-card bg-dark overflow-hidden shadow-xl relative">
                                 <img 
-                                    src={profile.profilePicUrl || DEFAULT_AVATAR} 
+                                    src={profile.profilePicUrl || DEFAULT_AVATAR || undefined} 
                                     alt={profile.username} 
                                     className="w-full h-full object-cover"
                                     onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
@@ -547,7 +547,7 @@ const Profile: React.FC = () => {
                                 }}
                                 className="relative group rounded-2xl overflow-hidden border-2 border-gray-800 hover:border-brand-500 transition-all aspect-square bg-dark"
                             >
-                                <img src={url} alt={`Preset ${index + 1}`} className="w-full h-full object-cover p-2" />
+                                <img src={url || undefined} alt={`Preset ${index + 1}`} className="w-full h-full object-cover p-2" />
                                 <div className="absolute inset-0 bg-brand-500/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <CheckCircle2 className="w-8 h-8 text-brand-400 drop-shadow-lg" />
                                 </div>
@@ -909,7 +909,7 @@ const Profile: React.FC = () => {
                             onClick={() => handleBannerSelect(url)}
                             className="relative group rounded-xl overflow-hidden border-2 border-transparent hover:border-brand-500 transition-all aspect-video"
                         >
-                            <img src={url} alt={`Preset ${index + 1}`} className="w-full h-full object-cover" />
+                            <img src={url || undefined} alt={`Preset ${index + 1}`} className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                 <span className="text-xs font-black uppercase tracking-widest text-white bg-brand-500 px-3 py-1 rounded-full">Select</span>
                             </div>

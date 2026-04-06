@@ -4,7 +4,8 @@ import { doc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { User, Hash, Save, LogOut } from 'lucide-react';
+import { User, Hash, Save, LogOut, CheckCircle2 } from 'lucide-react';
+import { PRESET_AVATARS } from '../constants';
 
 const CompleteProfile: React.FC = () => {
     const { user, profile, logout } = useAuth();
@@ -13,6 +14,7 @@ const CompleteProfile: React.FC = () => {
 
     const [inGameId, setInGameId] = useState('');
     const [inGameName, setInGameName] = useState('');
+    const [selectedAvatar, setSelectedAvatar] = useState(PRESET_AVATARS[0]);
     const [isSaving, setIsSaving] = useState(false);
 
     if (!user || !profile) return null;
@@ -39,12 +41,14 @@ const CompleteProfile: React.FC = () => {
             batch.update(userRef, {
                 inGameId: inGameId.trim(),
                 inGameName: inGameName.trim(),
+                profilePicUrl: selectedAvatar,
                 updatedAt: serverTimestamp()
             });
 
             batch.set(publicRef, {
                 inGameId: inGameId.trim(),
                 inGameName: inGameName.trim(),
+                profilePicUrl: selectedAvatar,
                 updatedAt: serverTimestamp()
             }, { merge: true });
 
@@ -73,6 +77,31 @@ const CompleteProfile: React.FC = () => {
                 </div>
 
                 <form onSubmit={handleSave} className="space-y-6">
+                    <div>
+                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-3 block text-center">
+                            Choose Your Gaming Avatar
+                        </label>
+                        <div className="grid grid-cols-3 gap-3 mb-6">
+                            {PRESET_AVATARS.map((url, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setSelectedAvatar(url)}
+                                    className={`relative rounded-xl overflow-hidden border-2 transition-all aspect-square bg-dark ${
+                                        selectedAvatar === url ? 'border-brand-500 scale-105 shadow-[0_0_15px_rgba(255,0,85,0.5)]' : 'border-gray-800 hover:border-gray-600'
+                                    }`}
+                                >
+                                    <img src={url || undefined} alt={`Avatar ${idx + 1}`} className="w-full h-full object-cover p-1" />
+                                    {selectedAvatar === url && (
+                                        <div className="absolute inset-0 bg-brand-500/20 flex items-center justify-center">
+                                            <CheckCircle2 className="w-6 h-6 text-brand-400 drop-shadow-lg" />
+                                        </div>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <div>
                         <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                             <Hash className="w-3 h-3" /> In-Game ID (UID)

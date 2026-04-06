@@ -4,21 +4,12 @@ export const DEFAULT_BANNER = 'https://firebasestorage.googleapis.com/v0/b/nexpl
 export const DEFAULT_TEAM_LOGO = 'https://firebasestorage.googleapis.com/v0/b/nexplay-app.appspot.com/o/assets%2Fdefault-team.png?alt=media&token=placeholder-token';
 
 export const PRESET_AVATARS = [
-    // Retro Pixel Art
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=Juggernaut',
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=Viper',
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=Wraith',
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=Sniper',
-    // RPG Adventurers
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=Dragon',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=Knight',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=Mage',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=Rogue',
-    // Sci-Fi Mechas
-    'https://api.dicebear.com/7.x/bottts/svg?seed=Cyber',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=Mecha',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=Glitch',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=Nexus'
+    'https://api.dicebear.com/7.x/bottts/svg?seed=Cyber&backgroundColor=1a1a1a',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=Mecha&backgroundColor=1a1a1a',
+    'https://api.dicebear.com/7.x/pixel-art/svg?seed=Viper&backgroundColor=1a1a1a',
+    'https://api.dicebear.com/7.x/pixel-art/svg?seed=Wraith&backgroundColor=1a1a1a',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Dragon&backgroundColor=1a1a1a',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=Knight&backgroundColor=1a1a1a'
 ];
 
 export const PRESET_TEAM_LOGOS = [

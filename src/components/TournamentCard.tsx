@@ -24,7 +24,7 @@ const TournamentCard: React.FC<TournamentCardProps> = ({ tournament }) => {
             {/* Banner Section */}
             <div className="h-48 relative overflow-hidden">
                 <motion.img 
-                    src={bannerUrl} 
+                    src={bannerUrl || undefined} 
                     alt={tournament.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                     referrerPolicy="no-referrer"

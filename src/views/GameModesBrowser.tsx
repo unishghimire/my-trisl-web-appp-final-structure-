@@ -89,7 +89,7 @@ const GameModesBrowser: React.FC = () => {
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                 <div className="space-y-1">
                     <h1 className="text-4xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
-                        <img src={game.logoUrl || 'https://picsum.photos/seed/gaming/400/300'} alt={game.name} className="w-12 h-12 object-cover rounded-lg" referrerPolicy="no-referrer" />
+                        <img src={game.logoUrl || 'https://picsum.photos/seed/gaming/400/300' || undefined} alt={game.name} className="w-12 h-12 object-cover rounded-lg" referrerPolicy="no-referrer" />
                         {game.name} Modes
                     </h1>
                     <p className="text-gray-500 text-sm font-medium uppercase tracking-widest">Select a mode to view tournaments</p>
@@ -113,7 +113,7 @@ const GameModesBrowser: React.FC = () => {
                             
                             <div className="relative h-48 w-full overflow-hidden rounded-2xl border border-gray-800 group-hover:border-brand-500/50 transition-all duration-500 shadow-2xl">
                                 <img 
-                                    src={getModeImage(mode, idx)} 
+                                    src={getModeImage(mode, idx) || undefined} 
                                     alt={mode} 
                                     className="w-full h-full object-cover group-hover:scale-110 group-hover:rotate-1 transition-transform duration-700 ease-out" 
                                     referrerPolicy="no-referrer"

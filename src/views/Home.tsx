@@ -81,7 +81,7 @@ const Home: React.FC = () => {
                     ) : (
                         slides.map((slide, index) => (
                             <div key={slide.id} className={`slide ${index === currentSlide ? 'active' : ''}`}>
-                                <img src={slide.imageUrl} className="w-full h-full object-cover opacity-60" alt={slide.title} />
+                                <img src={slide.imageUrl || undefined} className="w-full h-full object-cover opacity-60" alt={slide.title} />
                                 <div className="absolute inset-0 flex flex-col justify-center px-8 md:px-16 z-20">
                                     <h1 className="text-4xl md:text-6xl font-bold mb-4 neon-text text-white uppercase">{slide.title}</h1>
                                     <div className="flex gap-4">

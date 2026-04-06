@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { UserProfile, Team, Tournament } from '../types';
-import { Shield, Trophy, Briefcase, Users, ArrowLeft, CheckCircle2, Copy, UserPlus, UserMinus, Calendar, Share2, Eye } from 'lucide-react';
+import { UserProfile, Team, Tournament, OrgPost } from '../types';
+import { Shield, Trophy, Briefcase, Users, ArrowLeft, CheckCircle2, Copy, UserPlus, UserMinus, Calendar, Share2, Eye, MessageSquare, Plus } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
+import Modal from '../components/Modal';
+import { formatDate } from '../utils';
 
 const PublicProfile: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -15,6 +18,7 @@ const PublicProfile: React.FC = () => {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [teams, setTeams] = useState<Team[]>([]);
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
+    const [orgPosts, setOrgPosts] = useState<OrgPost[]>([]);
     const [loading, setLoading] = useState(true);
     const [copiedId, setCopiedId] = useState(false);
     const [isFollowing, setIsFollowing] = useState(false);
@@ -24,101 +28,127 @@ const PublicProfile: React.FC = () => {
     const [followingCount, setFollowingCount] = useState(0);
     const [stats, setStats] = useState({ tournamentsJoined: 0, totalWinnings: 0, winRate: 0 });
 
+    // Create Post Modal State
+    const [showCreatePost, setShowCreatePost] = useState(false);
+    const [postTitle, setPostTitle] = useState('');
+    const [postContent, setPostContent] = useState('');
+    const [postImageUrl, setPostImageUrl] = useState('');
+    const [isCreatingPost, setIsCreatingPost] = useState(false);
+
     useEffect(() => {
-        if (id) {
-            fetchProfileData();
-            fetchStats();
-            fetchTournaments();
-        }
-    }, [id]);
-
-    const fetchTournaments = async () => {
-        if (!id) return;
-        try {
-            const q = query(collection(db, 'tournaments'), where('hostUid', '==', id));
-            const snap = await getDocs(q);
-            setTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
-        } catch (error) {
-            console.error("Error fetching tournaments:", error);
-        }
-    };
-
-    const fetchStats = async () => {
-        if (!id) return;
-        try {
-            // Tournaments joined
-            const partQ = query(collection(db, 'participants'), where('userId', '==', id));
-            const partSnap = await getDocs(partQ);
-            const tournamentsJoined = partSnap.size;
-
-            // Total winnings
-            const txQ = query(collection(db, 'transactions'), where('userId', '==', id), where('type', '==', 'prize'));
-            const txSnap = await getDocs(txQ);
-            let totalWinnings = 0;
-            txSnap.forEach(doc => totalWinnings += doc.data().amount);
-
-            // Win Rate (approximate - based on prize transactions)
-            const winRate = tournamentsJoined > 0 ? (txSnap.size / tournamentsJoined) * 100 : 0;
-
-            setStats({ tournamentsJoined, totalWinnings, winRate });
-        } catch (error) {
-            console.error("Error fetching stats:", error);
-        }
-    };
-
-    const fetchProfileData = async () => {
-        setLoading(true);
-        try {
+        const fetchAllData = async () => {
             if (!id) return;
-            
-            // Fetch public profile
-            const userDoc = await getDoc(doc(db, 'users_public', id));
-            if (userDoc.exists()) {
-                setProfile({ uid: userDoc.id, ...userDoc.data() } as UserProfile);
-            } else {
-                showToast('User not found', 'error');
-                return;
-            }
+            setLoading(true);
+            try {
+                // 1. Fetch Profile
+                const userDoc = await getDoc(doc(db, 'users_public', id));
+                if (!userDoc.exists()) {
+                    showToast('User not found', 'error');
+                    setLoading(false);
+                    return;
+                }
+                const profileData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+                setProfile(profileData);
 
-            // Fetch teams user belongs to
-            const memberQ = query(collection(db, 'team_members'), where('userId', '==', id));
-            const memberSnap = await getDocs(memberQ);
-            const teamIds = memberSnap.docs.map(d => d.data().teamId);
-            
-            if (teamIds.length > 0) {
-                const teamsData: Team[] = [];
-                for (const teamId of teamIds) {
-                    const teamDoc = await getDoc(doc(db, 'teams', teamId));
-                    if (teamDoc.exists()) {
-                        teamsData.push({ id: teamDoc.id, ...teamDoc.data() } as Team);
+                const promises: Promise<any>[] = [];
+
+                // 2. Fetch Teams
+                promises.push(getDocs(query(collection(db, 'team_members'), where('userId', '==', id))).then(async (memberSnap) => {
+                    const teamIds = memberSnap.docs.map(d => d.data().teamId);
+                    if (teamIds.length > 0) {
+                        const teamsData: Team[] = [];
+                        for (const teamId of teamIds) {
+                            const teamDoc = await getDoc(doc(db, 'teams', teamId));
+                            if (teamDoc.exists()) {
+                                teamsData.push({ id: teamDoc.id, ...teamDoc.data() } as Team);
+                            }
+                        }
+                        setTeams(teamsData);
                     }
+                }));
+
+                // 3. Fetch Tournaments
+                promises.push(getDocs(query(collection(db, 'tournaments'), where('hostUid', '==', id))).then(snap => {
+                    setTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
+                }));
+
+                // 4. Fetch Stats
+                promises.push(getDocs(query(collection(db, 'participants'), where('userId', '==', id))).then(partSnap => {
+                    const tournamentsJoined = partSnap.size;
+                    getDocs(query(collection(db, 'transactions'), where('userId', '==', id), where('type', '==', 'prize'))).then(txSnap => {
+                        let totalWinnings = 0;
+                        txSnap.forEach(doc => totalWinnings += doc.data().amount);
+                        const winRate = tournamentsJoined > 0 ? (txSnap.size / tournamentsJoined) * 100 : 0;
+                        setStats({ tournamentsJoined, totalWinnings, winRate });
+                    });
+                }));
+
+                // 5. Fetch Follow Data
+                promises.push(getDocs(query(collection(db, 'follows'), where('followingId', '==', id))).then(snap => setFollowerCount(snap.size)));
+                promises.push(getDocs(query(collection(db, 'follows'), where('followerId', '==', id))).then(snap => setFollowingCount(snap.size)));
+
+                if (user && user.uid !== id) {
+                    promises.push(getDocs(query(collection(db, 'follows'), where('followerId', '==', user.uid), where('followingId', '==', id))).then(snap => {
+                        if (!snap.empty) {
+                            setIsFollowing(true);
+                            setFollowId(snap.docs[0].id);
+                        }
+                    }));
                 }
-                setTeams(teamsData);
-            }
 
-            // Check if following
-            if (user && user.uid !== id) {
-                const followQ = query(collection(db, 'follows'), where('followerId', '==', user.uid), where('followingId', '==', id));
-                const followSnap = await getDocs(followQ);
-                if (!followSnap.empty) {
-                    setIsFollowing(true);
-                    setFollowId(followSnap.docs[0].id);
+                // 6. Fetch Org Posts
+                if (profileData.role === 'organizer') {
+                    promises.push(getDocs(query(collection(db, 'org_posts'), where('orgId', '==', id))).then(snap => {
+                        const posts = snap.docs.map(d => ({ id: d.id, ...d.data() } as OrgPost));
+                        // Sort locally since we don't have a composite index for orgId + createdAt yet
+                        posts.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+                        setOrgPosts(posts);
+                    }));
                 }
+
+                await Promise.all(promises);
+
+            } catch (error) {
+                console.error("Error fetching profile data:", error);
+            } finally {
+                setLoading(false);
             }
+        };
 
-            // Get counts
-            const followersQ = query(collection(db, 'follows'), where('followingId', '==', id));
-            const followersSnap = await getDocs(followersQ);
-            setFollowerCount(followersSnap.size);
+        fetchAllData();
+    }, [id, user]);
 
-            const followingQ = query(collection(db, 'follows'), where('followerId', '==', id));
-            const followingSnap = await getDocs(followingQ);
-            setFollowingCount(followingSnap.size);
-
+    const handleCreatePost = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user || !profile || !postTitle.trim() || !postContent.trim()) return;
+        
+        setIsCreatingPost(true);
+        try {
+            const newPost = {
+                orgId: user.uid,
+                orgName: profile.orgName || profile.username,
+                orgAvatar: profile.profilePicUrl || '',
+                title: postTitle.trim(),
+                content: postContent.trim(),
+                imageUrl: postImageUrl.trim(),
+                createdAt: serverTimestamp()
+            };
+            
+            const docRef = await addDoc(collection(db, 'org_posts'), newPost);
+            
+            // Add to local state
+            setOrgPosts(prev => [{ id: docRef.id, ...newPost, createdAt: { seconds: Date.now() / 1000 } } as OrgPost, ...prev]);
+            
+            showToast('Announcement posted successfully!', 'success');
+            setShowCreatePost(false);
+            setPostTitle('');
+            setPostContent('');
+            setPostImageUrl('');
         } catch (error) {
-            console.error("Error fetching profile:", error);
+            console.error("Error creating post:", error);
+            showToast('Failed to create post', 'error');
         } finally {
-            setLoading(false);
+            setIsCreatingPost(false);
         }
     };
 
@@ -203,6 +233,10 @@ const PublicProfile: React.FC = () => {
 
     return (
         <div className="max-w-3xl mx-auto animate-fade-in pb-20">
+            <Helmet>
+                <title>{profile.username} | NexPlay Profile</title>
+                <meta name="description" content={`View ${profile.username}'s profile on NexPlay. Tournaments joined: ${stats.tournamentsJoined}.`} />
+            </Helmet>
             {/* Header Card */}
             <div className="bg-card rounded-2xl border border-gray-800 overflow-hidden shadow-2xl mb-6">
                 <div 
@@ -216,7 +250,7 @@ const PublicProfile: React.FC = () => {
                         <div className="relative group">
                             <div className="w-32 h-32 rounded-2xl border-4 border-card bg-dark overflow-hidden shadow-xl flex items-center justify-center bg-gradient-to-br from-brand-600 to-purple-800 text-4xl font-black text-white relative">
                                 {profile.profilePicUrl ? (
-                                    <img src={profile.profilePicUrl} className="w-full h-full object-cover" alt="Avatar" />
+                                    <img src={profile.profilePicUrl || undefined} className="w-full h-full object-cover" alt="Avatar" />
                                 ) : (
                                     profile.username[0].toUpperCase()
                                 )}
@@ -232,7 +266,7 @@ const PublicProfile: React.FC = () => {
                                     <div className="flex items-center gap-2 mb-3">
                                         <span className="text-xs text-gray-500 font-mono bg-dark px-2 py-1 rounded border border-gray-800 flex items-center gap-2">
                                             ID: {id}
-                                            <button onClick={handleCopyId} className="hover:text-white transition">
+                                            <button onClick={handleCopyId} aria-label="Copy User ID" className="hover:text-white transition">
                                                 {copiedId ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
                                             </button>
                                         </span>
@@ -306,7 +340,7 @@ const PublicProfile: React.FC = () => {
                                     <Link to={`/team/${team.id}`} key={team.id} className="flex items-center gap-3 bg-dark p-3 rounded-xl border border-gray-800 hover:border-brand-500/50 transition group">
                                         <div className="w-10 h-10 rounded-lg bg-gray-800 overflow-hidden flex items-center justify-center shrink-0">
                                             {team.logoUrl ? (
-                                                <img src={team.logoUrl} alt={team.name} className="w-full h-full object-cover" />
+                                                <img src={team.logoUrl || undefined} alt={team.name} className="w-full h-full object-cover" />
                                             ) : (
                                                 <Users className="w-5 h-5 text-gray-600" />
                                             )}
@@ -321,6 +355,56 @@ const PublicProfile: React.FC = () => {
                             <p className="text-gray-500 text-sm">Not a member of any teams yet.</p>
                         )}
                     </div>
+
+                    {/* Announcements (Org Posts) */}
+                    {profile.role === 'organizer' && (
+                        <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
+                            <div className="flex items-center justify-between mb-4 border-b border-gray-800 pb-2">
+                                <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                    <MessageSquare className="w-5 h-5 text-brand-500" /> Announcements
+                                </h3>
+                                {user?.uid === id && (
+                                    <button 
+                                        onClick={() => setShowCreatePost(true)}
+                                        className="bg-brand-500 hover:bg-brand-400 text-white px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition flex items-center gap-1"
+                                    >
+                                        <Plus className="w-4 h-4" /> Create Post
+                                    </button>
+                                )}
+                            </div>
+                            
+                            {orgPosts.length > 0 ? (
+                                <div className="space-y-4">
+                                    {orgPosts.map(post => (
+                                        <Link to={`/post/${post.id}`} key={post.id} className="block bg-dark p-5 rounded-xl border border-gray-700 shadow-lg hover:border-brand-500/50 transition group">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <h4 className="font-black text-white text-lg group-hover:text-brand-400 transition line-clamp-1">{post.title}</h4>
+                                                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1 shrink-0">
+                                                    <Calendar className="w-3 h-3" /> {formatDate(post.createdAt)}
+                                                </div>
+                                            </div>
+                                            <p className="text-gray-400 text-sm line-clamp-2 mb-4">
+                                                {post.content}
+                                            </p>
+                                            {post.imageUrl && (
+                                                <div className="w-full h-32 rounded-lg overflow-hidden mb-4">
+                                                    <img src={post.imageUrl || undefined} alt="Post Attachment" className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+                                            <div className="text-brand-500 text-xs font-bold uppercase tracking-widest flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                                Read More <ArrowLeft className="w-3 h-3 rotate-180" />
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 bg-dark rounded-xl border border-gray-800 border-dashed">
+                                    <MessageSquare className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                                    <p className="text-gray-500 text-sm">No announcements yet.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Tournaments Hosted */}
                     {profile.role === 'organizer' && (
@@ -415,6 +499,59 @@ const PublicProfile: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Create Post Modal */}
+            <Modal isOpen={showCreatePost} onClose={() => setShowCreatePost(false)} title="Create Announcement">
+                <form onSubmit={handleCreatePost} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Title</label>
+                        <input
+                            type="text"
+                            value={postTitle}
+                            onChange={(e) => setPostTitle(e.target.value)}
+                            className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-500 transition"
+                            placeholder="Announcement Title"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Content</label>
+                        <textarea
+                            value={postContent}
+                            onChange={(e) => setPostContent(e.target.value)}
+                            className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-500 transition h-32 resize-none"
+                            placeholder="Write your announcement here..."
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Image URL (Optional)</label>
+                        <input
+                            type="url"
+                            value={postImageUrl}
+                            onChange={(e) => setPostImageUrl(e.target.value)}
+                            className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-500 transition"
+                            placeholder="https://example.com/image.jpg"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 mt-6">
+                        <button
+                            type="button"
+                            onClick={() => setShowCreatePost(false)}
+                            className="px-4 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isCreatingPost || !postTitle.trim() || !postContent.trim()}
+                            className="bg-brand-500 hover:bg-brand-600 text-white px-6 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isCreatingPost ? 'Posting...' : 'Post Announcement'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
         </div>
     );
 };

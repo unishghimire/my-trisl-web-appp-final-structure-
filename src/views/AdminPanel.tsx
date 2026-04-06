@@ -1191,7 +1191,7 @@ const AdminPanel: React.FC = () => {
                                         <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2">Proof of Payment</div>
                                         {selectedTx.proofUrl ? (
                                             <div className="relative group rounded-2xl overflow-hidden border border-gray-800 bg-black">
-                                                <img src={selectedTx.proofUrl} className="w-full aspect-square object-contain" alt="Proof" />
+                                                <img src={selectedTx.proofUrl || undefined} className="w-full aspect-square object-contain" alt="Proof" />
                                                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
                                                     <a href={selectedTx.proofUrl} target="_blank" rel="noreferrer" className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all border border-white/10">
                                                         <Eye className="w-5 h-5" /> View Full Image
@@ -1257,7 +1257,7 @@ const AdminPanel: React.FC = () => {
                                     slides.map(s => (
                                         <div key={s.id} className="flex justify-between items-center bg-dark p-2 rounded mb-2 border border-gray-700">
                                             <div className="flex items-center gap-2">
-                                                <img src={s.imageUrl} className="w-10 h-6 object-cover rounded" alt={s.title} />
+                                                <img src={s.imageUrl || undefined} className="w-10 h-6 object-cover rounded" alt={s.title} />
                                                 <span className="text-white text-sm truncate w-32">{s.title}</span>
                                             </div>
                                             <div className="flex gap-2">
@@ -1307,7 +1307,7 @@ const AdminPanel: React.FC = () => {
                                             ) : (
                                                 <>
                                                     <img 
-                                                        src={slideImage || DEFAULT_BANNER} 
+                                                        src={slideImage || DEFAULT_BANNER || undefined} 
                                                         alt="Slide Preview" 
                                                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
                                                         onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
@@ -1367,7 +1367,7 @@ const AdminPanel: React.FC = () => {
                             .filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
                             .map(t => (
                                 <div key={t.id} className="bg-dark p-4 rounded-xl border border-gray-800 space-y-3">
-                                    <img src={t.bannerUrl} className="w-full aspect-video object-cover rounded-lg" alt={t.title} />
+                                    <img src={t.bannerUrl || undefined} className="w-full aspect-video object-cover rounded-lg" alt={t.title} />
                                     <div>
                                         <h3 className="font-bold text-white truncate">{t.title}</h3>
                                         <div className="flex justify-between items-center mt-2">
@@ -1491,7 +1491,7 @@ const AdminPanel: React.FC = () => {
                         {orgTournaments.length > 0 ? (
                             orgTournaments.map(t => (
                                 <div key={t.id} className="bg-dark p-4 rounded-xl border border-gray-800 space-y-3">
-                                    <img src={t.bannerUrl} className="w-full aspect-video object-cover rounded-lg" alt={t.title} />
+                                    <img src={t.bannerUrl || undefined} className="w-full aspect-video object-cover rounded-lg" alt={t.title} />
                                     <div>
                                         <h3 className="font-bold text-white truncate">{t.title}</h3>
                                         <div className="flex justify-between items-center mt-2">
@@ -2019,7 +2019,7 @@ const AdminPanel: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {games.map(game => (
                             <div key={game.id} className="bg-card p-4 rounded-xl border border-gray-800 flex items-center gap-4">
-                                <img src={game.logoUrl} className="w-16 h-16 object-cover rounded-lg border border-gray-700" alt={game.name} />
+                                <img src={game.logoUrl || undefined} className="w-16 h-16 object-cover rounded-lg border border-gray-700" alt={game.name} />
                                 <div className="flex-grow">
                                     <h3 className="font-bold text-white">{game.name}</h3>
                                     <div className="flex items-center gap-2 mt-1">
@@ -2071,7 +2071,7 @@ const AdminPanel: React.FC = () => {
                                             ) : (
                                                 <>
                                                     <img 
-                                                        src={gameLogo || DEFAULT_BANNER} 
+                                                        src={gameLogo || DEFAULT_BANNER || undefined} 
                                                         alt="Game Logo Preview" 
                                                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
                                                         onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}
@@ -2159,7 +2159,7 @@ const AdminPanel: React.FC = () => {
                             <div key={pm.id} className="bg-card p-4 rounded-xl border border-gray-800 flex flex-col gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="w-16 h-16 bg-dark rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
-                                        <img src={pm.qrUrl} className="w-full h-full object-contain" alt="QR" />
+                                        <img src={pm.qrUrl || undefined} className="w-full h-full object-contain" alt="QR" />
                                     </div>
                                     <div className="flex-grow">
                                         <h3 className="font-bold text-white">{pm.name}</h3>
@@ -2235,7 +2235,7 @@ const AdminPanel: React.FC = () => {
                                             ) : (
                                                 <>
                                                     <img 
-                                                        src={paymentQr || NEXPLAY_LOGO} 
+                                                        src={paymentQr || NEXPLAY_LOGO || undefined} 
                                                         alt="QR Preview" 
                                                         className="w-full h-full object-contain opacity-80 group-hover:opacity-100 transition"
                                                         onError={(e) => (e.currentTarget.src = NEXPLAY_LOGO)}

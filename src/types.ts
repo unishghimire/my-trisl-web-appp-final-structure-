@@ -218,3 +218,15 @@ export interface OrgApplication {
     status: 'pending' | 'approved' | 'rejected';
     timestamp: Timestamp | any;
 }
+
+export interface OrgPost {
+    id: string;
+    orgId: string;
+    orgName: string;
+    orgAvatar?: string;
+    title: string;
+    content: string;
+    imageUrl?: string;
+    createdAt: Timestamp | any;
+    updatedAt?: Timestamp | any;
+}

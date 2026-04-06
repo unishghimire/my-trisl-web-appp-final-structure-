@@ -262,7 +262,7 @@ const Wallet: React.FC = () => {
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 bg-dark rounded-lg flex items-center justify-center border border-gray-700">
-                                                <img src={pm.qrUrl} className="w-8 h-8 object-contain" alt={pm.name} />
+                                                <img src={pm.qrUrl || undefined} className="w-8 h-8 object-contain" alt={pm.name} />
                                             </div>
                                             <div className="text-left">
                                                 <div className="font-bold text-white group-hover:text-brand-400 transition">{pm.name}</div>
@@ -293,7 +293,7 @@ const Wallet: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-4">
                                     <div className="bg-white p-4 rounded-2xl shadow-inner flex items-center justify-center aspect-square">
-                                        <img src={selectedMethod.qrUrl} className="w-full h-full object-contain" alt="QR Code" />
+                                        <img src={selectedMethod.qrUrl || undefined} className="w-full h-full object-contain" alt="QR Code" />
                                     </div>
                                     <div className="bg-dark p-4 rounded-xl border border-gray-800">
                                         <div className="text-[10px] text-gray-500 uppercase font-bold mb-2 flex items-center gap-1">

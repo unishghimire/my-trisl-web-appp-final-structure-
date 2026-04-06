@@ -18,7 +18,7 @@ const GameCard: React.FC<GameCardProps> = ({ game }) => {
         >
             <div className="relative h-48 overflow-hidden">
                 <img 
-                    src={game.logoUrl || 'https://picsum.photos/seed/gaming/400/300'} 
+                    src={game.logoUrl || 'https://picsum.photos/seed/gaming/400/300' || undefined} 
                     alt={game.name} 
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     referrerPolicy="no-referrer"

@@ -270,7 +270,7 @@ const OrganizerPanel: React.FC = () => {
                                         <div className="flex items-center gap-5 w-full lg:w-auto">
                                             <div className="w-20 h-20 rounded-2xl overflow-hidden bg-dark shrink-0 border border-gray-800 relative">
                                                 <img 
-                                                    src={t.bannerUrl || 'https://picsum.photos/seed/esports/200/200'} 
+                                                    src={t.bannerUrl || 'https://picsum.photos/seed/esports/200/200' || undefined} 
                                                     alt={t.title}
                                                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                                 />
@@ -494,7 +494,7 @@ const OrganizerPanel: React.FC = () => {
                             {fetchingTeam ? (
                                 <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
                             ) : selectedTeam?.logoUrl ? (
-                                <img src={selectedTeam.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                                <img src={selectedTeam.logoUrl || undefined} alt="Logo" className="w-full h-full object-cover" />
                             ) : (
                                 <Users className="w-8 h-8 text-gray-700" />
                             )}

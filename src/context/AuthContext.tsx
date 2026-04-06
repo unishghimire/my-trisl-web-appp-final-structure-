@@ -43,51 +43,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                const userRef = doc(db, 'users', firebaseUser.uid);
-                const userSnap = await getDoc(userRef);
-                
-                if (!userSnap.exists()) {
-                    // Create user document if it doesn't exist (e.g., first Google Sign-In)
-                    const newUser = {
-                        uid: firebaseUser.uid,
-                        email: firebaseUser.email || '',
-                        username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-                        role: 'player',
-                        balance: 0,
-                        totalEarnings: 0,
-                        inGameId: '',
-                        inGameName: '',
-                        teamName: '',
-                        phone: '',
-                        isBanned: false,
-                        createdAt: serverTimestamp(),
-                    };
-                    await setDoc(userRef, newUser);
+            try {
+                if (firebaseUser) {
+                    const userRef = doc(db, 'users', firebaseUser.uid);
+                    const userSnap = await getDoc(userRef);
                     
-                    // Create public profile
-                    await setDoc(doc(db, 'users_public', firebaseUser.uid), {
-                        uid: firebaseUser.uid,
-                        username: newUser.username,
-                        totalEarnings: 0,
-                        inGameId: '',
-                        inGameName: '',
-                        role: 'player',
-                        updatedAt: serverTimestamp(),
-                    });
-                    
-                    setUser({ uid: newUser.uid, email: newUser.email, username: newUser.username, role: newUser.role });
-                    setProfile(newUser as UserProfile);
+                    if (!userSnap.exists()) {
+                        // Create user document if it doesn't exist (e.g., first Google Sign-In)
+                        const newUser = {
+                            uid: firebaseUser.uid,
+                            email: firebaseUser.email || '',
+                            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+                            role: 'player',
+                            balance: 0,
+                            totalEarnings: 0,
+                            inGameId: '',
+                            inGameName: '',
+                            teamName: '',
+                            phone: '',
+                            isBanned: false,
+                            createdAt: serverTimestamp(),
+                        };
+                        await setDoc(userRef, newUser);
+                        
+                        // Create public profile
+                        await setDoc(doc(db, 'users_public', firebaseUser.uid), {
+                            uid: firebaseUser.uid,
+                            username: newUser.username,
+                            totalEarnings: 0,
+                            inGameId: '',
+                            inGameName: '',
+                            role: 'player',
+                            updatedAt: serverTimestamp(),
+                        });
+                        
+                        setUser({ uid: newUser.uid, email: newUser.email, username: newUser.username, role: newUser.role });
+                        setProfile(newUser as UserProfile);
+                    } else {
+                        const data = userSnap.data() as UserProfile;
+                        setUser({ uid: data.uid, email: data.email, username: data.username, role: data.role || 'player' });
+                        setProfile(data);
+                    }
                 } else {
-                    const data = userSnap.data() as UserProfile;
-                    setUser({ uid: data.uid, email: data.email, username: data.username, role: data.role || 'player' });
-                    setProfile(data);
+                    setUser(null);
+                    setProfile(null);
                 }
-            } else {
+            } catch (error) {
+                console.error("Error in auth state change:", error);
+                // If there's an error (e.g., permission denied), we should still stop loading
+                // and potentially clear the user state to prevent infinite loading
                 setUser(null);
                 setProfile(null);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         });
 
         return () => unsubscribe();
