@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
@@ -9,37 +9,46 @@ import Breadcrumbs from './components/Breadcrumbs';
 import Footer from './components/Footer';
 import BackButton from './components/BackButton';
 import ScrollToTop from './components/ScrollToTop';
-import Home from './views/Home';
-import Tournaments from './views/Tournaments';
-import TournamentDetails from './views/TournamentDetails';
-import Dashboard from './views/Dashboard';
-import Wallet from './views/Wallet';
-import Profile from './views/Profile';
-import Leaderboard from './views/Leaderboard';
-import AdminPanel from './views/AdminPanel';
-import OrganizerPanel from './views/OrganizerPanel';
-import About from './views/About';
-import Contact from './views/Contact';
-import Privacy from './views/Privacy';
-import Teams from './views/Teams';
-import TeamDetails from './views/TeamDetails';
-import OrgBrowser from './views/OrgBrowser';
-import PublicProfile from './views/PublicProfile';
 import ProfileCompletionGuard from './components/ProfileCompletionGuard';
-import CompleteProfile from './views/CompleteProfile';
-import PostDetails from './views/PostDetails';
 import Toast, { ToastType } from './components/Toast';
-import GamesBrowser from './views/GamesBrowser';
-import GameModesBrowser from './views/GameModesBrowser';
-import Login from './views/Login';
-import Register from './views/Register';
 import ProtectedRoute from './components/ProtectedRoute';
+
+// Lazy load views
+const Home = lazy(() => import('./views/Home'));
+const Tournaments = lazy(() => import('./views/Tournaments'));
+const TournamentDetails = lazy(() => import('./views/TournamentDetails'));
+const Dashboard = lazy(() => import('./views/Dashboard'));
+const Wallet = lazy(() => import('./views/Wallet'));
+const Profile = lazy(() => import('./views/Profile'));
+const Leaderboard = lazy(() => import('./views/Leaderboard'));
+const AdminPanel = lazy(() => import('./views/AdminPanel'));
+const OrganizerPanel = lazy(() => import('./views/OrganizerPanel'));
+const About = lazy(() => import('./views/About'));
+const Contact = lazy(() => import('./views/Contact'));
+const Privacy = lazy(() => import('./views/Privacy'));
+const Teams = lazy(() => import('./views/Teams'));
+const TeamDetails = lazy(() => import('./views/TeamDetails'));
+const OrgBrowser = lazy(() => import('./views/OrgBrowser'));
+const PublicProfile = lazy(() => import('./views/PublicProfile'));
+const CompleteProfile = lazy(() => import('./views/CompleteProfile'));
+const PostDetails = lazy(() => import('./views/PostDetails'));
+const GamesBrowser = lazy(() => import('./views/GamesBrowser'));
+const GameModesBrowser = lazy(() => import('./views/GameModesBrowser'));
+const Login = lazy(() => import('./views/Login'));
+const Register = lazy(() => import('./views/Register'));
 
 interface ToastData {
   id: number;
   message: string;
   type: ToastType;
 }
+
+const LoadingFallback = () => (
+  <div className="min-h-[60vh] flex flex-col items-center justify-center">
+    <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+    <p className="text-xs text-gray-500 font-black uppercase tracking-widest">Loading...</p>
+  </div>
+);
 
 const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast: (id: number) => void }) => {
   const location = useLocation();
@@ -57,32 +66,34 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
           </div>
         )}
         <ProfileCompletionGuard>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/tournaments" element={<Tournaments />} />
-            <Route path="/games" element={<GamesBrowser />} />
-            <Route path="/games/:id" element={<GameModesBrowser />} />
-            <Route path="/details/:id" element={<TournamentDetails />} />
-            <Route path="/post/:id" element={<PostDetails />} />
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfile /></ProtectedRoute>} />
-            <Route path="/user/:id" element={<PublicProfile />} />
-            <Route path="/profile/:id" element={<PublicProfile />} />
-            <Route path="/organization/:id" element={<PublicProfile />} />
-            <Route path="/organizations" element={<OrgBrowser />} />
-            <Route path="/teams" element={<Teams />} />
-            <Route path="/team/:id" element={<TeamDetails />} />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminPanel /></ProtectedRoute>} />
-            <Route path="/organizer" element={<ProtectedRoute allowedRoles={['organizer', 'admin']}><OrganizerPanel /></ProtectedRoute>} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/privacy" element={<Privacy />} />
-          </Routes>
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/tournaments" element={<Tournaments />} />
+              <Route path="/games" element={<GamesBrowser />} />
+              <Route path="/games/:id" element={<GameModesBrowser />} />
+              <Route path="/details/:id" element={<TournamentDetails />} />
+              <Route path="/post/:id" element={<PostDetails />} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfile /></ProtectedRoute>} />
+              <Route path="/user/:id" element={<PublicProfile />} />
+              <Route path="/profile/:id" element={<PublicProfile />} />
+              <Route path="/organization/:id" element={<PublicProfile />} />
+              <Route path="/organizations" element={<OrgBrowser />} />
+              <Route path="/teams" element={<Teams />} />
+              <Route path="/team/:id" element={<TeamDetails />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminPanel /></ProtectedRoute>} />
+              <Route path="/organizer" element={<ProtectedRoute allowedRoles={['organizer', 'admin']}><OrganizerPanel /></ProtectedRoute>} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/privacy" element={<Privacy />} />
+            </Routes>
+          </Suspense>
         </ProfileCompletionGuard>
       </main>
       <Footer />

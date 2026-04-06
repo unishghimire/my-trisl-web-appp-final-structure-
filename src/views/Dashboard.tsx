@@ -30,16 +30,31 @@ const Dashboard: React.FC = () => {
             ));
             
             const joinedTours: (Tournament & { role: 'participant' | 'organizer'; registration?: any })[] = [];
-            for (const pDoc of partSnap.docs) {
-                const pData = pDoc.data();
-                const tDoc = await getDoc(doc(db, 'tournaments', pData.tournamentId));
-                if (tDoc.exists()) {
-                    joinedTours.push({ 
-                        id: tDoc.id, 
-                        ...tDoc.data(), 
-                        role: 'participant',
-                        registration: pData 
-                    } as Tournament & { role: 'participant' | 'organizer'; registration?: any });
+            const tournamentIds = partSnap.docs.map(doc => doc.data().tournamentId);
+            const uniqueTournamentIds = [...new Set(tournamentIds)];
+            
+            if (uniqueTournamentIds.length > 0) {
+                const chunks = [];
+                for (let i = 0; i < uniqueTournamentIds.length; i += 10) {
+                    chunks.push(uniqueTournamentIds.slice(i, i + 10));
+                }
+                
+                for (const chunk of chunks) {
+                    const q = query(collection(db, 'tournaments'), where('__name__', 'in', chunk));
+                    const tSnap = await getDocs(q);
+                    
+                    tSnap.docs.forEach(tDoc => {
+                        // Find the corresponding participant record
+                        const pDoc = partSnap.docs.find(p => p.data().tournamentId === tDoc.id);
+                        if (pDoc) {
+                            joinedTours.push({ 
+                                id: tDoc.id, 
+                                ...tDoc.data(), 
+                                role: 'participant',
+                                registration: pDoc.data() 
+                            } as Tournament & { role: 'participant' | 'organizer'; registration?: any });
+                        }
+                    });
                 }
             }
 
@@ -65,15 +80,21 @@ const Dashboard: React.FC = () => {
             // Fetch My Teams
             const memberQ = query(collection(db, 'team_members'), where('userId', '==', user.uid));
             const memberSnap = await getDocs(memberQ);
-            const myTeamIds = memberSnap.docs.map(d => d.data().teamId);
+            const myTeamIds = [...new Set(memberSnap.docs.map(d => d.data().teamId))];
             
             if (myTeamIds.length > 0) {
                 const teamsData: Team[] = [];
-                for (const teamId of myTeamIds) {
-                    const teamDoc = await getDoc(doc(db, 'teams', teamId));
-                    if (teamDoc.exists()) {
+                const chunks = [];
+                for (let i = 0; i < myTeamIds.length; i += 10) {
+                    chunks.push(myTeamIds.slice(i, i + 10));
+                }
+                
+                for (const chunk of chunks) {
+                    const q = query(collection(db, 'teams'), where('__name__', 'in', chunk));
+                    const teamSnap = await getDocs(q);
+                    teamSnap.docs.forEach(teamDoc => {
                         teamsData.push({ id: teamDoc.id, ...teamDoc.data() } as Team);
-                    }
+                    });
                 }
                 setMyTeams(teamsData);
             }

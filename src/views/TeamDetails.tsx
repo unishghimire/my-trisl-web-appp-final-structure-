@@ -79,13 +79,30 @@ const TeamDetails: React.FC = () => {
             const membersData = membersSnap.docs.map(d => ({ id: d.id, ...d.data() } as TeamMember));
             
             // Fetch user profiles for members
-            const membersWithProfiles = await Promise.all(membersData.map(async (m) => {
-                const userDoc = await getDoc(doc(db, 'users_public', m.userId));
-                if (userDoc.exists()) {
-                    return { ...m, user: { uid: userDoc.id, ...userDoc.data() } as UserProfile };
+            const userIds = [...new Set(membersData.map(m => m.userId))];
+            const userProfilesMap: Record<string, UserProfile> = {};
+            
+            if (userIds.length > 0) {
+                const chunks = [];
+                for (let i = 0; i < userIds.length; i += 10) {
+                    chunks.push(userIds.slice(i, i + 10));
+                }
+                
+                for (const chunk of chunks) {
+                    const q = query(collection(db, 'users_public'), where('__name__', 'in', chunk));
+                    const usersSnap = await getDocs(q);
+                    usersSnap.docs.forEach(doc => {
+                        userProfilesMap[doc.id] = { uid: doc.id, ...doc.data() } as UserProfile;
+                    });
+                }
+            }
+
+            const membersWithProfiles = membersData.map(m => {
+                if (userProfilesMap[m.userId]) {
+                    return { ...m, user: userProfilesMap[m.userId] };
                 }
                 return m;
-            }));
+            });
             setMembers(membersWithProfiles);
 
             // Fetch pending invites
