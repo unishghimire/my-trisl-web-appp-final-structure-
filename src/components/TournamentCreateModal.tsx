@@ -23,6 +23,7 @@ import {
   Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import PrizeDistributionInput from './PrizeDistributionInput';
 
 interface TournamentCreateModalProps {
   isOpen: boolean;
@@ -60,17 +61,21 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
     game: '',
     bannerUrl: '',
     type: 'Battle Royale',
+    format: 'single_elimination' as any,
     map: '',
     teamType: 'solo' as 'solo' | 'duo' | 'squad',
     teamSize: 1,
     slots: 100,
     prizePool: 0,
+    currency: 'NPR',
     entryFee: 0,
     startTime: '',
     rules: '',
     prizeDistribution: [
-      { rank: 1, amount: 0 },
-    ]
+      { id: 'prize-initial-1', rank: 1, label: '1st', amount: 0 },
+    ] as any[],
+    matchType: 'scrims' as 'scrims' | 'tournament',
+    scheduleType: 'auto' as 'auto' | 'manual'
   });
 
   const [selectedGame, setSelectedGame] = useState<any>(null);
@@ -90,17 +95,26 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
         game: editTournament.game,
         bannerUrl: editTournament.bannerUrl || '',
         type: editTournament.type,
+        format: editTournament.format || 'single_elimination',
         map: editTournament.map || '',
         teamType: editTournament.teamType as any,
         teamSize: editTournament.teamSize,
         slots: editTournament.slots,
         prizePool: editTournament.prizePool,
+        currency: editTournament.currency || 'NPR',
         entryFee: editTournament.entryFee,
         startTime: editTournament.startTime instanceof Timestamp 
           ? new Date(editTournament.startTime.toDate().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
           : new Date(new Date(editTournament.startTime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
         rules: editTournament.rules,
-        prizeDistribution: editTournament.prizeDistribution || [{ rank: 1, amount: 0 }]
+        prizeDistribution: editTournament.prizeDistribution && editTournament.prizeDistribution.length > 0 
+          ? editTournament.prizeDistribution.map(p => ({
+              id: p.id || `prize-${Date.now()}-${Math.random()}`,
+              rank: p.rank,
+              label: p.label || `${p.rank}`,
+              amount: p.amount
+            }))
+          : [{ id: 'prize-initial-1', rank: 1, label: '1st', amount: 0 }]
       });
       setCurrentStep(1);
     } else {
@@ -109,16 +123,18 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
         game: '',
         bannerUrl: '',
         type: 'Battle Royale',
+        format: 'single_elimination',
         map: '',
         teamType: 'solo',
         teamSize: 1,
         slots: 100,
         prizePool: 0,
+        currency: 'NPR',
         entryFee: 0,
         startTime: '',
         rules: '',
         prizeDistribution: [
-          { rank: 1, amount: 0 },
+          { id: 'prize-initial-1', rank: 1, label: '1st', amount: 0 },
         ]
       });
     }
@@ -131,8 +147,12 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
       case 2:
         return formData.type !== '' && formData.slots > 0 && formData.startTime !== '';
       case 3:
-        const totalPrize = formData.prizeDistribution.reduce((acc, p) => acc + p.amount, 0);
-        return formData.prizePool >= 0 && formData.entryFee >= 0 && totalPrize <= formData.prizePool && formData.prizeDistribution.every(p => p.amount >= 0);
+        const totalPrize = formData.prizeDistribution.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+        const hasValidPrizes = formData.prizeDistribution.length === 0 || 
+          formData.prizeDistribution.every(p => p.amount > 0 && p.label.trim() !== '');
+        return formData.prizePool >= 0 && formData.entryFee >= 0 && 
+               (formData.prizePool === 0 || totalPrize <= formData.prizePool) && 
+               hasValidPrizes;
       case 4:
         return formData.rules.trim() !== '';
       default:
@@ -152,20 +172,6 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
-  const handleAddRank = () => {
-    const nextRank = formData.prizeDistribution.length + 1;
-    setFormData({
-      ...formData,
-      prizeDistribution: [...formData.prizeDistribution, { rank: nextRank, amount: 0 }]
-    });
-  };
-
-  const handleRemoveRank = (idx: number) => {
-    const newDist = formData.prizeDistribution.filter((_, i) => i !== idx)
-      .map((p, i) => ({ ...p, rank: i + 1 }));
-    setFormData({ ...formData, prizeDistribution: newDist });
-  };
-
   const handleSubmit = async () => {
     if (!user) return;
     if (!validateStep()) {
@@ -179,6 +185,7 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
         hostUid: editTournament ? editTournament.hostUid : user.uid,
         currentPlayers: editTournament ? editTournament.currentPlayers : 0,
         status: editTournament ? editTournament.status : 'upcoming',
+        stage: editTournament ? editTournament.stage : 'registration',
         updatedAt: serverTimestamp(),
         startTime: Timestamp.fromDate(new Date(formData.startTime)),
         isFeatured: editTournament ? editTournament.isFeatured : false,
@@ -222,17 +229,19 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
           game: '',
           bannerUrl: '',
           type: 'Battle Royale',
+          format: 'single_elimination',
           map: '',
           teamType: 'solo',
           teamSize: 1,
           slots: 100,
           prizePool: 0,
+          currency: 'NPR',
           entryFee: 0,
           startTime: '',
           rules: '',
           prizeDistribution: [
-            { rank: 1, amount: 0 },
-          ]
+            { id: 'prize-initial-1', rank: 1, label: '1st', amount: 0 },
+          ] as any[]
         });
         setCurrentStep(1);
       }
@@ -280,6 +289,32 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
                   <option key={g.id} value={g.name}>{g.name}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Match Type</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, matchType: 'scrims'})}
+                  className={`flex-1 p-3 rounded-lg border ${formData.matchType === 'scrims' ? 'border-brand-500 bg-brand-500/10' : 'border-gray-800 bg-dark'}`}
+                >
+                  Scrims
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!profile?.isPowerOrganizer) {
+                      showToast('Only Power Organizers can host Tournaments', 'warning');
+                      return;
+                    }
+                    setFormData({...formData, matchType: 'tournament'});
+                  }}
+                  className={`flex-1 p-3 rounded-lg border ${formData.matchType === 'tournament' ? 'border-brand-500 bg-brand-500/10' : 'border-gray-800 bg-dark'} ${!profile?.isPowerOrganizer ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  Tournament
+                </button>
+              </div>
+              {!profile?.isPowerOrganizer && <p className="text-[10px] text-yellow-500 mt-1">Upgrade to Power Organizer to host Tournaments</p>}
             </div>
             <div>
               <label className="block text-xs font-black text-gray-500 uppercase mb-2 tracking-widest">Banner Image (Paste or Drop Image)</label>
@@ -395,14 +430,18 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Map (Optional)</label>
-                <input 
-                  type="text" 
-                  value={formData.map}
-                  onChange={(e) => setFormData({...formData, map: e.target.value})}
-                  placeholder="e.g. Erangel"
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tournament Format</label>
+                <select 
+                  value={formData.format}
+                  onChange={(e) => setFormData({...formData, format: e.target.value as any})}
                   className="w-full bg-dark border border-gray-800 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
-                />
+                >
+                  <option value="single_elimination">Single Elimination</option>
+                  <option value="double_elimination">Double Elimination</option>
+                  <option value="round_robin">Round Robin</option>
+                  <option value="swiss">Swiss System</option>
+                  <option value="hybrid">Hybrid (Groups + Knockout)</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Total Slots</label>
@@ -417,14 +456,26 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Start Date & Time</label>
-              <input 
-                type="datetime-local" 
-                value={formData.startTime}
-                onChange={(e) => setFormData({...formData, startTime: e.target.value})}
-                className="w-full bg-dark border border-gray-800 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Map (Optional)</label>
+                <input 
+                  type="text" 
+                  value={formData.map}
+                  onChange={(e) => setFormData({...formData, map: e.target.value})}
+                  placeholder="e.g. Erangel"
+                  className="w-full bg-dark border border-gray-800 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Start Date & Time</label>
+                <input 
+                  type="datetime-local" 
+                  value={formData.startTime}
+                  onChange={(e) => setFormData({...formData, startTime: e.target.value})}
+                  className="w-full bg-dark border border-gray-800 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
+                />
+              </div>
             </div>
           </motion.div>
         );
@@ -467,57 +518,13 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
                 </div>
               </div>
             </div>
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-xs font-bold text-gray-500 uppercase">Prize Distribution</label>
-                <button 
-                  onClick={handleAddRank}
-                  className="text-[10px] bg-brand-500/10 text-brand-500 px-2 py-1 rounded-md font-bold hover:bg-brand-500/20 transition"
-                >
-                  + Add Rank
-                </button>
-              </div>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                {formData.prizeDistribution.map((p, idx) => (
-                  <div key={idx} className="flex items-center gap-3 bg-surface p-3 rounded-lg border border-gray-800 group">
-                    <span className="text-sm font-bold text-brand-500 w-12 shrink-0">Rank {p.rank}</span>
-                    <div className="relative flex-1">
-                      <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
-                      <input 
-                        type="number" 
-                        value={isNaN(p.amount) ? '' : p.amount}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value);
-                          const newDist = [...formData.prizeDistribution];
-                          newDist[idx].amount = isNaN(val) ? 0 : val;
-                          setFormData({...formData, prizeDistribution: newDist});
-                        }}
-                        placeholder="Amount"
-                        className="w-full bg-dark border border-gray-700 rounded p-2 pl-7 text-sm text-white outline-none focus:border-brand-500"
-                      />
-                    </div>
-                    {formData.prizeDistribution.length > 1 && (
-                      <button 
-                        onClick={() => handleRemoveRank(idx)}
-                        className="p-2 text-gray-500 hover:text-red-500 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 p-3 bg-dark rounded-lg border border-gray-800 flex justify-between items-center">
-                <span className="text-xs text-gray-500 font-bold uppercase">Total Allocated:</span>
-                <span className={`text-sm font-black ${
-                  formData.prizeDistribution.reduce((acc, p) => acc + p.amount, 0) > formData.prizePool 
-                  ? 'text-red-500' 
-                  : 'text-green-500'
-                }`}>
-                  ₹{formData.prizeDistribution.reduce((acc, p) => acc + p.amount, 0).toLocaleString()} / ₹{formData.prizePool.toLocaleString()}
-                </span>
-              </div>
-            </div>
+            <PrizeDistributionInput
+              prizes={formData.prizeDistribution}
+              onChange={(newPrizes) => setFormData({ ...formData, prizeDistribution: newPrizes })}
+              currency={formData.currency}
+              onCurrencyChange={(newCurrency) => setFormData({ ...formData, currency: newCurrency })}
+              totalPrizePool={formData.prizePool}
+            />
           </motion.div>
         );
       case 4:

@@ -14,6 +14,7 @@ import { deleteDoc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 
 const OrganizerPanel: React.FC = () => {
+    // Force Vite cache invalidation
     const { user, profile } = useAuth();
     const { showToast } = useNotification();
     const [hostedTournaments, setHostedTournaments] = useState<Tournament[]>([]);
@@ -28,7 +29,7 @@ const OrganizerPanel: React.FC = () => {
     const [roomPass, setRoomPass] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
-    const fetchHosted = async () => {
+    const fetchHosted = React.useCallback(async () => {
         if (!user) return;
         try {
             const q = query(
@@ -43,11 +44,11 @@ const OrganizerPanel: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
 
     useEffect(() => {
         fetchHosted();
-    }, [user]);
+    }, [fetchHosted]);
 
     const [selectedTeam, setSelectedTeam] = useState<{ name: string; members: any[]; teamId?: string; logoUrl?: string } | null>(null);
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
@@ -334,12 +335,12 @@ const OrganizerPanel: React.FC = () => {
                                                 >
                                                     <Edit className="w-4 h-4" />
                                                 </button>
-                                                <button 
-                                                    onClick={() => handleManage(t)} 
+                                                <Link 
+                                                    to={`/tournament-admin/${t.id}`}
                                                     className="bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl text-xs font-black flex items-center gap-2 transition-all hover:shadow-[0_0_20px_rgba(var(--brand-primary-rgb),0.4)] active:scale-95 uppercase tracking-widest"
                                                 >
                                                     <Settings className="w-4 h-4" /> Manage
-                                                </button>
+                                                </Link>
                                                 <button 
                                                     onClick={() => {
                                                         setSelectedTournament(t);

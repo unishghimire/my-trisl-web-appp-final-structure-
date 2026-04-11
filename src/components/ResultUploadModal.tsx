@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Tournament } from '../types';
+import { Tournament, ManualResult, ResultTemplateConfig } from '../types';
 import Modal from './Modal';
-import { Upload, User, Plus, Trash2, Save, Trophy, Users, DollarSign, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, User, Plus, Trash2, Save, Trophy, Users, DollarSign, CheckCircle2, AlertCircle, List } from 'lucide-react';
 import { NotificationService } from '../services/NotificationService';
 import { useNotification } from '../context/NotificationContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
+import ManualResultManager from './ManualResultManager';
+import { useAuth } from '../context/AuthContext';
 
 interface ResultUploadModalProps {
     isOpen: boolean;
@@ -18,11 +20,36 @@ interface ResultUploadModalProps {
 
 const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, tournament, onSuccess }) => {
     const { showToast } = useNotification();
-    const [activeTab, setActiveTab] = useState<'file' | 'manual'>('file');
+    const { user, profile } = useAuth();
+    const [activeTab, setActiveTab] = useState<'file' | 'manual' | 'leaderboard'>('file');
     const [participants, setParticipants] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [resultUrl, setResultUrl] = useState('');
     const [winners, setWinners] = useState<{ uid: string; amount: number; rank: number; username: string }[]>([]);
+    
+    const [manualResults, setManualResults] = useState<ManualResult[]>([]);
+    const [templateConfig, setTemplateConfig] = useState<ResultTemplateConfig>({
+        template: 'classic',
+        theme: { primaryColor: '#ef4444', background: 'dark' },
+        showFields: { rank: true, team: true, score: true, status: true }
+    });
+
+    const handleSavePreset = async (name: string, config: ResultTemplateConfig) => {
+        if (!user) return;
+        try {
+            const newPreset = { id: `preset-${Date.now()}`, name, config };
+            const currentPresets = profile?.resultPresets || [];
+            const updatedPresets = [...currentPresets, newPreset];
+            
+            await updateDoc(doc(db, 'users', user.uid), {
+                resultPresets: updatedPresets
+            });
+            showToast('Preset saved successfully!', 'success');
+        } catch (error) {
+            console.error("Error saving preset:", error);
+            showToast('Failed to save preset', 'error');
+        }
+    };
 
     const { handlePaste, handleDrop, handleDragOver, isProcessing } = useInvisibleImage({
         onUploadStart: () => setLoading(true),
@@ -47,7 +74,6 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
             };
             fetchParticipants();
 
-            // Pre-fill winners based on prize distribution if available
             if (tournament.prizeDistribution) {
                 setWinners(tournament.prizeDistribution.map(p => ({
                     uid: '',
@@ -57,6 +83,13 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
                 })));
             } else {
                 setWinners([{ uid: '', username: '', amount: 0, rank: 1 }]);
+            }
+
+            if (tournament.manualResults) {
+                setManualResults(tournament.manualResults);
+            }
+            if (tournament.resultTemplate) {
+                setTemplateConfig(tournament.resultTemplate);
             }
         }
     }, [isOpen, tournament]);
@@ -86,6 +119,34 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
     };
 
     const handleSubmit = async () => {
+        // Validate manual results
+        if (activeTab === 'leaderboard') {
+            const teams = new Set();
+            const ranks = new Set();
+            for (const res of manualResults) {
+                if (!res.team.trim()) {
+                    showToast('Team name is required for all leaderboard entries.', 'error');
+                    return;
+                }
+                if (teams.has(res.team.trim().toLowerCase())) {
+                    showToast(`Duplicate team name "${res.team}" found in leaderboard.`, 'error');
+                    return;
+                }
+                teams.add(res.team.trim().toLowerCase());
+
+                if (ranks.has(res.rank)) {
+                    showToast(`Duplicate rank "${res.rank}" found in leaderboard.`, 'error');
+                    return;
+                }
+                ranks.add(res.rank);
+
+                if (isNaN(res.score)) {
+                    showToast('Score must be a number for all leaderboard entries.', 'error');
+                    return;
+                }
+            }
+        }
+
         setLoading(true);
         try {
             const batch = writeBatch(db);
@@ -97,17 +158,18 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
                 status: 'completed',
                 resultUrl: resultUrl,
                 winners: validWinners,
+                manualResults: manualResults,
+                resultTemplate: templateConfig,
                 completedAt: serverTimestamp()
             });
 
-            // Update winners' total earnings and sync to users_public
             for (const winner of validWinners) {
                 const userRef = doc(db, 'users', winner.userId);
                 const publicRef = doc(db, 'users_public', winner.userId);
                 
                 batch.update(userRef, {
                     totalEarnings: increment(winner.prize),
-                    balance: increment(winner.prize) // Also add to balance
+                    balance: increment(winner.prize)
                 });
                 
                 batch.set(publicRef, {
@@ -115,7 +177,6 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
                     updatedAt: serverTimestamp()
                 }, { merge: true });
 
-                // Create a transaction record for the prize
                 const txRef = doc(collection(db, 'transactions'));
                 batch.set(txRef, {
                     userId: winner.userId,
@@ -130,7 +191,6 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
 
             await batch.commit();
             
-            // Notify participants
             await NotificationService.notifyParticipants(
                 tournament.id,
                 'Results Uploaded!',
@@ -151,13 +211,13 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Finalize Results: ${tournament.title}`} maxWidth="max-w-2xl">
+        <Modal isOpen={isOpen} onClose={onClose} title={`Finalize Results: ${tournament.title}`} maxWidth="max-w-4xl">
             <div className="space-y-6">
-                {/* Tabs */}
                 <div className="flex p-1 bg-dark rounded-2xl border border-gray-800">
                     {[
                         { id: 'file', label: 'File Upload', icon: Upload },
-                        { id: 'manual', label: 'Manual Entry', icon: User },
+                        { id: 'leaderboard', label: 'Leaderboard Builder', icon: List },
+                        { id: 'manual', label: 'Payouts', icon: DollarSign },
                     ].map((tab) => (
                         <button 
                             key={tab.id}
@@ -174,7 +234,7 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
                 </div>
 
                 <AnimatePresence mode="wait">
-                    {activeTab === 'file' ? (
+                    {activeTab === 'file' && (
                         <motion.div 
                             key="file"
                             initial={{ opacity: 0, y: 10 }}
@@ -235,7 +295,28 @@ const ResultUploadModal: React.FC<ResultUploadModalProps> = ({ isOpen, onClose, 
                                 </motion.div>
                             )}
                         </motion.div>
-                    ) : (
+                    )}
+
+                    {activeTab === 'leaderboard' && (
+                        <motion.div 
+                            key="leaderboard"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-4"
+                        >
+                            <ManualResultManager 
+                                results={manualResults}
+                                onChange={setManualResults}
+                                templateConfig={templateConfig}
+                                onTemplateChange={setTemplateConfig}
+                                presets={profile?.resultPresets || []}
+                                onSavePreset={handleSavePreset}
+                            />
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'manual' && (
                         <motion.div 
                             key="manual"
                             initial={{ opacity: 0, y: 10 }}

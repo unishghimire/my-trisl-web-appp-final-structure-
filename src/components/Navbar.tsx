@@ -7,7 +7,12 @@ import { Notification } from '../types';
 import ProfileDropdown from './navbar/ProfileDropdown';
 import WalletDisplay from './navbar/WalletDisplay';
 
-const Navbar: React.FC = () => {
+interface NavbarProps {
+    openDepositModal: () => void;
+    openWithdrawModal: () => void;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) => {
     const { user, profile, logout } = useAuth();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -130,7 +135,7 @@ const Navbar: React.FC = () => {
                                     )}
                                 </div>
                                 <WalletDisplay balance={profile?.balance || 0} />
-                                <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />
+                                <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />
                             </>
                         ) : (
                             <button onClick={() => navigate('/login')} className="bg-brand-600 hover:bg-brand-500 text-white px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-brand-600/20">LOGIN</button>
@@ -140,7 +145,7 @@ const Navbar: React.FC = () => {
                     {/* Mobile Menu Toggle */}
                     <div className="lg:hidden flex items-center gap-1">
                         {user && <WalletDisplay balance={profile?.balance || 0} />}
-                        {user && <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />}
+                        {user && <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />}
                         <button onClick={toggleMobileMenu} className="text-gray-400 hover:text-white p-1 rounded-md focus:outline-none">
                             {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                         </button>

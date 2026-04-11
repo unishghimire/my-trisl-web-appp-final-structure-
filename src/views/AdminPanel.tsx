@@ -881,6 +881,18 @@ const AdminPanel: React.FC = () => {
         }
     };
 
+    const togglePowerOrganizer = async (org: UserProfile) => {
+        try {
+            const newStatus = !org.isPowerOrganizer;
+            await updateDoc(doc(db, 'users', org.uid), { isPowerOrganizer: newStatus });
+            setOrganizers(prev => prev.map(o => o.uid === org.uid ? { ...o, isPowerOrganizer: newStatus } : o));
+            showToast(`Organizer power ${newStatus ? 'granted' : 'revoked'}`, 'success');
+        } catch (error) {
+            console.error("Error toggling power organizer:", error);
+            showToast('Failed to update organizer power', 'error');
+        }
+    };
+
     const executeDeleteGame = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'games', id));
@@ -1569,6 +1581,13 @@ const AdminPanel: React.FC = () => {
                                         <div>
                                             <h3 className="font-bold text-white">{org.username}</h3>
                                             <p className="text-[10px] text-gray-500 uppercase font-bold">{org.orgName || 'No Org Name'}</p>
+                                            <button
+                                                onClick={() => togglePowerOrganizer(org)}
+                                                className={`mt-1 flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded ${org.isPowerOrganizer ? 'bg-green-600/20 text-green-500' : 'bg-gray-600/20 text-gray-500'}`}
+                                            >
+                                                {org.isPowerOrganizer ? <CheckCircle className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                                                {org.isPowerOrganizer ? 'Power' : 'Standard'}
+                                            </button>
                                         </div>
                                     </div>
                                     <div className="flex gap-2">

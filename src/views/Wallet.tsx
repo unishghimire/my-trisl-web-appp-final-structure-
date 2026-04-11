@@ -179,7 +179,7 @@ const Wallet: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex border-b border-gray-800 mb-6 overflow-x-auto custom-scrollbar">
-                {(['overview', 'deposit', 'withdraw', 'transactions'] as const).map(tab => (
+                {(['overview', 'transactions'] as const).map(tab => (
                     <button 
                         key={tab}
                         onClick={() => setActiveTab(tab)}

@@ -1,15 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Settings, LogOut, ChevronDown, Users, Trophy } from 'lucide-react';
+import { User, Settings, LogOut, ChevronDown, Users, Trophy, Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 interface ProfileDropdownProps {
   username: string;
   avatarUrl?: string;
   onLogout: () => void;
+  openDepositModal: () => void;
+  openWithdrawModal: () => void;
 }
 
-const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, onLogout }) => {
+const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, onLogout, openDepositModal, openWithdrawModal }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -42,6 +44,12 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, 
           <Link to="/dashboard" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
             <User className="w-4 h-4" /> Dashboard
           </Link>
+          <button onClick={() => { setIsOpen(false); openDepositModal(); }} className="flex w-full items-center gap-2 px-4 py-3 text-sm text-green-400 hover:bg-surface hover:text-green-300 transition">
+            <Plus className="w-4 h-4" /> Deposit
+          </button>
+          <button onClick={() => { setIsOpen(false); openWithdrawModal(); }} className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-surface hover:text-red-300 transition">
+            <LogOut className="w-4 h-4" /> Withdraw
+          </button>
           <Link to="/leaderboard" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
             <Trophy className="w-4 h-4" /> Leaderboard
           </Link>

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -23,6 +24,7 @@ const Profile = lazy(() => import('./views/Profile'));
 const Leaderboard = lazy(() => import('./views/Leaderboard'));
 const AdminPanel = lazy(() => import('./views/AdminPanel'));
 const OrganizerPanel = lazy(() => import('./views/OrganizerPanel'));
+const TournamentAdminPanel = lazy(() => import('./views/TournamentAdminPanel'));
 const About = lazy(() => import('./views/About'));
 const Contact = lazy(() => import('./views/Contact'));
 const Privacy = lazy(() => import('./views/Privacy'));
@@ -53,10 +55,32 @@ const LoadingFallback = () => (
 const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast: (id: number) => void }) => {
   const location = useLocation();
   const isHome = location.pathname === '/';
+  const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | null>(null);
+
+  const openDepositModal = () => setActiveModal('deposit');
+  const openWithdrawModal = () => setActiveModal('withdraw');
+  const closeModal = () => setActiveModal(null);
 
   return (
     <div id="app" className="min-h-screen flex flex-col relative">
-      <Navbar />
+      <Navbar openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />
+      
+      {/* Bottom Sheet Modal */}
+      {activeModal && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={closeModal}></div>
+          <div className="relative w-full sm:max-w-md bg-card rounded-t-3xl sm:rounded-3xl border border-gray-800 p-6 animate-slide-up">
+            <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+              <X className="w-6 h-6" />
+            </button>
+            <h2 className="text-xl font-black text-white mb-6 uppercase tracking-widest">
+              {activeModal === 'deposit' ? 'Deposit Funds' : 'Withdraw Funds'}
+            </h2>
+            {/* Modal Content */}
+            <p className="text-gray-400">Content for {activeModal} goes here.</p>
+          </div>
+        </div>
+      )}
       <Breadcrumbs />
       <ScrollToTop />
       <main id="main-content" className="flex-grow container mx-auto px-4 pt-8 pb-24 relative min-h-[80vh]">
@@ -87,6 +111,7 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminPanel /></ProtectedRoute>} />
               <Route path="/organizer" element={<ProtectedRoute allowedRoles={['organizer', 'admin']}><OrganizerPanel /></ProtectedRoute>} />
+              <Route path="/tournament-admin/:id" element={<ProtectedRoute allowedRoles={['organizer', 'admin']}><TournamentAdminPanel /></ProtectedRoute>} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/about" element={<About />} />

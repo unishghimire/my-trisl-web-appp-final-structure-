@@ -67,7 +67,7 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'username', 'role', 'balance', 'totalEarnings', 'inGameId', 'inGameName', 'teamName', 'phone', 'isBanned', 'createdAt', 'bio', 'profilePicUrl', 'contactInfo', 'customActivity', 'bannerUrl', 'status', 'lastActive', 'updatedAt', 'skills', 'orgName', 'whatsapp', 'discord', 'youtube']) &&
+      return hasOnlyAllowedFields(['uid', 'email', 'username', 'role', 'balance', 'totalEarnings', 'inGameId', 'inGameName', 'teamName', 'phone', 'isBanned', 'createdAt', 'bio', 'profilePicUrl', 'contactInfo', 'customActivity', 'bannerUrl', 'status', 'lastActive', 'updatedAt', 'skills', 'orgName', 'whatsapp', 'discord', 'youtube', 'resultPresets', 'isPowerOrganizer']) &&
              data.username is string && data.username.size() > 0 && data.username.size() < 50 &&
              data.email is string && isValidEmail(data.email) &&
              data.role in ['player', 'organizer', 'admin'];

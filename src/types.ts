@@ -5,6 +5,7 @@ export interface UserProfile {
     email: string;
     username: string;
     role: 'player' | 'organizer' | 'admin';
+    isPowerOrganizer?: boolean; // Added
     balance: number;
     totalEarnings: number;
     inGameId: string;
@@ -33,6 +34,95 @@ export interface UserProfile {
         wins: number;
         losses: number;
     };
+    resultPresets?: { id: string; name: string; config: ResultTemplateConfig }[];
+}
+
+export interface PrizeDistribution {
+    id: string; // Unique ID for drag-and-drop
+    rank: number;
+    label: string; // e.g., "1st", "MVP"
+    amount: number;
+}
+
+export interface ManualResult {
+    id: string;
+    team: string;
+    rank: number;
+    score: number;
+    status: string;
+}
+
+export interface ResultTemplateConfig {
+    template: 'classic' | 'esports' | 'highlight' | 'compact' | 'custom';
+    theme: {
+        primaryColor: string;
+        background: string;
+    };
+    showFields: {
+        rank: boolean;
+        team: boolean;
+        score: boolean;
+        status: boolean;
+    };
+}
+
+export type TournamentStage = 'registration' | 'group_stage' | 'knockout' | 'completed';
+export type TournamentFormat = 'single_elimination' | 'double_elimination' | 'round_robin' | 'swiss' | 'hybrid';
+
+export interface TournamentGroup {
+    id: string;
+    name: string;
+    teamLimit: number;
+    teams: Team[]; // Array of teams
+    matches: Match[]; // Array of matches
+    isPublic: boolean;
+    passCode?: string;
+    inviteLink?: string;
+}
+
+export interface MatchChangeLog {
+    timestamp: Timestamp | any;
+    oldTime: Timestamp | any;
+    newTime: Timestamp | any;
+    reason?: string;
+    changedBy: string;
+}
+
+export interface Match {
+    id: string;
+    tournamentId?: string;
+    groupId?: string;
+    round: number;
+    team1Id?: string;
+    team2Id?: string;
+    score1?: number;
+    score2?: number;
+    status: 'scheduled' | 'live' | 'completed';
+    scheduledTime?: Timestamp | any;
+    rescheduledTime?: Timestamp | any; // Added
+    changeHistory?: MatchChangeLog[]; // Added
+    winnerId?: string;
+    replayLink?: string;
+}
+
+export interface Team {
+    id: string;
+    name: string;
+    description?: string;
+    logoUrl?: string;
+    bannerUrl?: string;
+    ownerId?: string;
+    createdAt?: Timestamp | any;
+    region?: string;
+    ranking?: number;
+    players?: string[]; // Array of user IDs
+    captainId?: string;
+    stats?: {
+        wins: number;
+        losses: number;
+        draws: number;
+        points: number;
+    };
 }
 
 export interface Tournament {
@@ -42,20 +132,27 @@ export interface Tournament {
     bannerUrl?: string;
     isFeatured?: boolean;
     prizePool: number;
+    currency?: string; // e.g., "NPR", "USD"
+    prizeDistribution?: PrizeDistribution[];
     entryFee: number;
     slots: number;
     currentPlayers: number;
     type: string;
+    matchType?: 'scrims' | 'tournament'; // Added
+    scheduleType?: 'auto' | 'manual'; // Added
     teamSize: number;
     teamType: 'solo' | 'duo' | 'squad';
     map?: string;
     startTime: Timestamp | any;
     rules?: string;
     status: 'upcoming' | 'live' | 'completed' | 'cancelled';
+    stage?: TournamentStage;
+    format?: TournamentFormat;
+    groups?: TournamentGroup[];
+    bracketMatches?: Match[];
     hostUid: string;
     hostName?: string; // Organization Name
     createdAt: Timestamp | any;
-    prizeDistribution?: { rank: number; amount: number }[];
     roomId?: string;
     roomPass?: string;
     ytLink?: string;
@@ -63,6 +160,8 @@ export interface Tournament {
     resultUrl?: string;
     winners?: { uid: string; amount: number; rank: number; username?: string }[];
     distributedAmount?: number;
+    manualResults?: ManualResult[];
+    resultTemplate?: ResultTemplateConfig;
 }
 
 export interface Transaction {
@@ -123,16 +222,6 @@ export interface Notification {
     read: boolean;
     link?: string;
     timestamp: Timestamp | any;
-}
-
-export interface Team {
-    id: string;
-    name: string;
-    description: string;
-    logoUrl?: string;
-    bannerUrl?: string;
-    ownerId: string;
-    createdAt: Timestamp | any;
 }
 
 export interface TeamMember {

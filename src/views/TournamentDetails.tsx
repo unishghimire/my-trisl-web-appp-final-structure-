@@ -13,6 +13,8 @@ import { NotificationService } from '../services/NotificationService';
 import { useNotification } from '../context/NotificationContext';
 import { Helmet } from 'react-helmet-async';
 import ProfileLink from '../components/ProfileLink';
+import PrizeBoard from '../components/PrizeBoard';
+import ResultBoard from '../components/ResultBoard';
 
 const TournamentDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -545,19 +547,15 @@ const TournamentDetails: React.FC = () => {
                                         <ProfileLink to={`/organization/${tournament.hostUid}`} name={tournament.hostName || 'Official Host'} />
                                     )}
                                 </div>
-                                <div className="bg-surface p-8 rounded-3xl border border-gray-800">
-                                    <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
-                                        <Medal className="w-6 h-6 text-brand-500" /> Prize Distribution
-                                    </h3>
-                                    <div className="space-y-3">
-                                        {tournament.prizeDistribution?.map((p, i) => (
-                                            <div key={i} className="flex justify-between items-center p-3 bg-dark rounded-xl border border-gray-800/50">
-                                                <span className="text-sm text-gray-400 font-bold">Rank {p.rank}</span>
-                                                <span className="text-sm font-black text-brand-400">{formatCurrency(p.amount)}</span>
-                                            </div>
-                                        ))}
+                                {tournament.prizeDistribution && tournament.prizeDistribution.length > 0 && (
+                                    <div className="mb-8">
+                                        <PrizeBoard 
+                                            prizes={tournament.prizeDistribution} 
+                                            currency={tournament.currency} 
+                                            totalPrizePool={tournament.prizePool}
+                                        />
                                     </div>
-                                </div>
+                                )}
                                 <div className="bg-surface p-8 rounded-3xl border border-gray-800">
                                     <h3 className="text-white font-black text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
                                         <Lock className="w-6 h-6 text-brand-500" /> Rules & Regulations
@@ -648,6 +646,16 @@ const TournamentDetails: React.FC = () => {
                                 exit={{ opacity: 0, y: -10 }}
                                 className="space-y-6"
                             >
+                                {tournament.prizeDistribution && tournament.prizeDistribution.length > 0 && (
+                                    <div className="mb-8">
+                                        <PrizeBoard 
+                                            prizes={tournament.prizeDistribution} 
+                                            currency={tournament.currency} 
+                                            totalPrizePool={tournament.prizePool}
+                                        />
+                                    </div>
+                                )}
+
                                 {tournament.status === 'completed' ? (
                                     <>
                                         <div className="bg-brand-600/10 border border-brand-500/30 p-8 rounded-3xl text-center">
@@ -655,6 +663,13 @@ const TournamentDetails: React.FC = () => {
                                             <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">Tournament Concluded</h3>
                                             <p className="text-gray-400 text-sm font-medium">Congratulations to all the winners!</p>
                                         </div>
+
+                                        {tournament.manualResults && tournament.manualResults.length > 0 && tournament.resultTemplate && (
+                                            <div className="space-y-3">
+                                                <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest ml-1">Final Standings</h4>
+                                                <ResultBoard results={tournament.manualResults} config={tournament.resultTemplate} />
+                                            </div>
+                                        )}
 
                                         {tournament.winners && tournament.winners.length > 0 && (
                                             <div className="space-y-3">
@@ -675,7 +690,9 @@ const TournamentDetails: React.FC = () => {
                                                             <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Champion Rank</div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="text-brand-400 font-black text-xl">{formatCurrency(winner.prize)}</div>
+                                                            <div className="text-brand-400 font-black text-xl">
+                                                                {tournament.currency === 'USD' ? '$' : tournament.currency === 'EUR' ? '€' : tournament.currency === 'INR' ? '₹' : 'Rs'} {(winner as any).amount?.toLocaleString() || (winner as any).prize?.toLocaleString() || 0}
+                                                            </div>
                                                             <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Prize Won</div>
                                                         </div>
                                                     </div>
