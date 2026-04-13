@@ -1,4 +1,4 @@
-import React, { useState, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useCallback, Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { HelmetProvider } from 'react-helmet-async';
@@ -19,7 +19,6 @@ const Home = lazy(() => import('./views/Home'));
 const Tournaments = lazy(() => import('./views/Tournaments'));
 const TournamentDetails = lazy(() => import('./views/TournamentDetails'));
 const Dashboard = lazy(() => import('./views/Dashboard'));
-const Wallet = lazy(() => import('./views/Wallet'));
 const Profile = lazy(() => import('./views/Profile'));
 const Leaderboard = lazy(() => import('./views/Leaderboard'));
 const AdminPanel = lazy(() => import('./views/AdminPanel'));
@@ -52,6 +51,8 @@ const LoadingFallback = () => (
   </div>
 );
 
+import WalletModal from './components/WalletModal';
+
 const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast: (id: number) => void }) => {
   const location = useLocation();
   const isHome = location.pathname === '/';
@@ -61,26 +62,20 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
   const openWithdrawModal = () => setActiveModal('withdraw');
   const closeModal = () => setActiveModal(null);
 
+  useEffect(() => {
+    closeModal();
+  }, [location.pathname]);
+
   return (
     <div id="app" className="min-h-screen flex flex-col relative">
       <Navbar openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />
       
-      {/* Bottom Sheet Modal */}
-      {activeModal && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={closeModal}></div>
-          <div className="relative w-full sm:max-w-md bg-card rounded-t-3xl sm:rounded-3xl border border-gray-800 p-6 animate-slide-up">
-            <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-white">
-              <X className="w-6 h-6" />
-            </button>
-            <h2 className="text-xl font-black text-white mb-6 uppercase tracking-widest">
-              {activeModal === 'deposit' ? 'Deposit Funds' : 'Withdraw Funds'}
-            </h2>
-            {/* Modal Content */}
-            <p className="text-gray-400">Content for {activeModal} goes here.</p>
-          </div>
-        </div>
-      )}
+      {/* Wallet Modal */}
+      <WalletModal 
+        isOpen={activeModal !== null} 
+        onClose={closeModal} 
+        initialTab={activeModal === 'withdraw' ? 'withdraw' : 'deposit'} 
+      />
       <Breadcrumbs />
       <ScrollToTop />
       <main id="main-content" className="flex-grow container mx-auto px-4 pt-8 pb-24 relative min-h-[80vh]">
@@ -92,14 +87,13 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
         <ProfileCompletionGuard>
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={<Home openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />} />
               <Route path="/tournaments" element={<Tournaments />} />
               <Route path="/games" element={<GamesBrowser />} />
               <Route path="/games/:id" element={<GameModesBrowser />} />
               <Route path="/details/:id" element={<TournamentDetails />} />
               <Route path="/post/:id" element={<PostDetails />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfile /></ProtectedRoute>} />
               <Route path="/user/:id" element={<PublicProfile />} />

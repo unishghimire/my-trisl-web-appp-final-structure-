@@ -22,6 +22,11 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
     const location = useLocation();
 
     useEffect(() => {
+        setIsMobileMenuOpen(false);
+        setIsNotificationsOpen(false);
+    }, [location.pathname]);
+
+    useEffect(() => {
         if (user) {
             const unsubNotifications = NotificationService.onNotifications(user.uid, setNotifications);
             const unsubCount = NotificationService.onUnreadCount(user.uid, setUnreadCount);
@@ -57,6 +62,8 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
     const navLinks = [
         { name: 'Home', path: '/' },
         { name: 'Games', path: '/games' },
+        { name: 'Tournaments', path: '/tournaments' },
+        { name: 'Teams', path: '/teams' },
     ];
 
     if (user) {
@@ -107,8 +114,8 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
                                         )}
                                     </button>
                                     {isNotificationsOpen && (
-                                        <div className="absolute right-0 mt-2 w-80 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-50">
-                                            <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
+                                    <div className="absolute right-0 mt-2 w-80 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-[60]">
+                                        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
                                                 <h4 className="text-sm font-bold text-white">Notifications</h4>
                                                 <button onClick={handleMarkAllRead} className="text-[10px] text-brand-400 hover:underline">Mark all as read</button>
                                             </div>
@@ -134,8 +141,8 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
                                         </div>
                                     )}
                                 </div>
-                                <WalletDisplay balance={profile?.balance || 0} />
-                                <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />
+                                <WalletDisplay balance={profile?.balance || 0} onClick={openDepositModal} />
+                                <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />
                             </>
                         ) : (
                             <button onClick={() => navigate('/login')} className="bg-brand-600 hover:bg-brand-500 text-white px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-brand-600/20">LOGIN</button>
@@ -144,8 +151,47 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
 
                     {/* Mobile Menu Toggle */}
                     <div className="lg:hidden flex items-center gap-1">
-                        {user && <WalletDisplay balance={profile?.balance || 0} />}
-                        {user && <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />}
+                        {user && (
+                            <div className="relative mr-1">
+                                <button onClick={toggleNotifications} className="text-gray-400 hover:text-white transition relative p-2">
+                                    <Bell className="w-5 h-5" />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
+                                            {unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                                {isNotificationsOpen && (
+                                    <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-[60]">
+                                        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
+                                            <h4 className="text-sm font-bold text-white">Notifications</h4>
+                                            <button onClick={handleMarkAllRead} className="text-[10px] text-brand-400 hover:underline">Mark all as read</button>
+                                        </div>
+                                        <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                                            {notifications.length > 0 ? (
+                                                notifications.map(n => (
+                                                    <div 
+                                                        key={n.id} 
+                                                        onClick={() => handleNotificationClick(n)}
+                                                        className={`p-4 border-b border-gray-800 cursor-pointer hover:bg-surface transition ${!n.read ? 'bg-brand-900/10' : ''}`}
+                                                    >
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <span className={`text-xs font-bold ${n.type === 'alert' ? 'text-red-400' : n.type === 'success' ? 'text-green-400' : 'text-brand-400'}`}>{n.title}</span>
+                                                            {!n.read && <span className="w-2 h-2 bg-brand-500 rounded-full"></span>}
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 line-clamp-2">{n.message}</p>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="p-8 text-center text-gray-500 text-sm">No notifications</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {user && <WalletDisplay balance={profile?.balance || 0} onClick={openDepositModal} />}
+                        {user && <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />}
                         <button onClick={toggleMobileMenu} className="text-gray-400 hover:text-white p-1 rounded-md focus:outline-none">
                             {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                         </button>
@@ -164,6 +210,9 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
                         ))}
                         {user ? (
                             <>
+                                <Link to="/dashboard" onClick={toggleMobileMenu} className="block px-3 py-3 border-b border-gray-800 text-gray-300">
+                                    Dashboard
+                                </Link>
                                 <Link to="/profile" onClick={toggleMobileMenu} className="block px-3 py-3 border-b border-gray-800 text-gray-300">
                                     My Profile
                                 </Link>

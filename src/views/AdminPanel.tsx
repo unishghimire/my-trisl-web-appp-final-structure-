@@ -64,9 +64,11 @@ const AdminPanel: React.FC = () => {
     const [isSlideModalOpen, setIsSlideModalOpen] = useState(false);
     const [editingSlide, setEditingSlide] = useState<Slide | null>(null);
     const [slideTitle, setSlideTitle] = useState('');
+    const [slideDescription, setSlideDescription] = useState('');
     const [slideImage, setSlideImage] = useState('');
     const [slideLink, setSlideLink] = useState('');
     const [slideBtnText, setSlideBtnText] = useState('View More');
+    const [slideIsActive, setSlideIsActive] = useState(true);
 
     // Settings State
     const [minWithdrawal, setMinWithdrawal] = useState('');
@@ -181,6 +183,9 @@ const AdminPanel: React.FC = () => {
 
                 // Fetch stats
                 const usersSnap = await getDocs(collection(db, 'users'));
+                const usersData = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+                setUsers(usersData);
+                
                 let totalBal = 0;
                 usersSnap.forEach(d => totalBal += (d.data().balance || 0));
 
@@ -242,12 +247,16 @@ const AdminPanel: React.FC = () => {
                 'Transaction Approved',
                 `Your ${tx.type} of ${formatCurrency(tx.amount)} has been approved.`,
                 'success',
-                '/wallet'
+                '/profile'
             );
 
             showToast('Transaction Approved', 'success');
             setPendingTransactions(prev => prev.filter(t => t.id !== tx.id));
-            setAllTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'success' } : t));
+            setAllTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'success', confirmedByUsername: profile?.username } : t));
+            
+            if (selectedTx && selectedTx.id === tx.id) {
+                setSelectedTx({ ...selectedTx, status: 'success', confirmedByUsername: profile?.username });
+            }
         } catch (error) {
             console.error("Error approving transaction:", error);
             showToast('Failed to approve transaction', 'error');
@@ -289,7 +298,7 @@ const AdminPanel: React.FC = () => {
                         'Transaction Refunded',
                         `Your transaction of ${formatCurrency(Math.abs(tx.amount))} has been manually refunded by an admin.`,
                         'info',
-                        '/wallet'
+                        '/profile'
                     );
 
                     showToast('Transaction Refunded', 'success');
@@ -328,7 +337,7 @@ const AdminPanel: React.FC = () => {
                 'Transaction Rejected',
                 `Your ${tx.type} of ${formatCurrency(tx.amount)} was rejected. Reason: ${reason || 'No reason provided'}`,
                 'alert',
-                '/wallet'
+                '/profile'
             );
 
             showToast('Transaction Rejected', 'success');
@@ -486,7 +495,7 @@ const AdminPanel: React.FC = () => {
                                 'Tournament Cancelled - Refunded',
                                 `The tournament "${tournament.title}" has been cancelled. Your entry fee of ${formatCurrency(refundAmount)} has been refunded to your wallet.`,
                                 'info',
-                                '/wallet'
+                                '/profile'
                             );
                         }
                     }
@@ -646,20 +655,6 @@ const AdminPanel: React.FC = () => {
         }
     };
 
-    const handleUpdateUserRole = async (uid: string, newRole: 'admin' | 'organizer' | 'player') => {
-        try {
-            await updateDoc(doc(db, 'users', uid), { role: newRole });
-            setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role: newRole } : u));
-            if (selectedUser?.uid === uid) {
-                setSelectedUser(prev => prev ? { ...prev, role: newRole } : null);
-            }
-            showToast(`User role updated to ${newRole}`, 'success');
-        } catch (error) {
-            console.error("Error updating user role:", error);
-            showToast('Failed to update user role', 'error');
-        }
-    };
-
     const handleSaveGame = async () => {
         if (!gameName || !gameLogo || !gameModes) return showToast('Please fill all fields', 'warning');
         const modesArray = gameModes.split(',').map(m => m.trim()).filter(m => m !== '');
@@ -754,9 +749,11 @@ const AdminPanel: React.FC = () => {
         try {
             const slideData = {
                 title: slideTitle,
+                description: slideDescription,
                 imageUrl: slideImage,
                 link: slideLink,
                 buttonText: slideBtnText,
+                isActive: slideIsActive,
                 createdAt: editingSlide ? editingSlide.createdAt : serverTimestamp()
             };
 
@@ -773,8 +770,10 @@ const AdminPanel: React.FC = () => {
             setIsSlideModalOpen(false);
             setEditingSlide(null);
             setSlideTitle('');
+            setSlideDescription('');
             setSlideImage('');
             setSlideLink('');
+            setSlideIsActive(true);
         } catch (error) {
             console.error("Error saving slide:", error);
             showToast('Failed to save slide', 'error');
@@ -809,6 +808,19 @@ const AdminPanel: React.FC = () => {
     const handleEditTournament = (tournament: Tournament) => {
         setSelectedTournament(tournament);
         setIsTournamentModalOpen(true);
+    };
+
+    const handleToggleFeatured = async (t: Tournament) => {
+        try {
+            const newStatus = !t.isFeatured;
+            await updateDoc(doc(db, 'tournaments', t.id), { isFeatured: newStatus });
+            setOrgTournaments(prev => prev.map(item => item.id === t.id ? { ...item, isFeatured: newStatus } : item));
+            setAllTournaments(prev => prev.map(item => item.id === t.id ? { ...item, isFeatured: newStatus } : item));
+            showToast(`Tournament ${newStatus ? 'featured' : 'unfeatured'}`, 'success');
+        } catch (error) {
+            console.error("Error toggling featured:", error);
+            showToast('Failed to update featured status', 'error');
+        }
     };
 
     const handleViewParticipants = (tournament: Tournament) => {
@@ -847,6 +859,22 @@ const AdminPanel: React.FC = () => {
         } catch (error) {
             console.error("Error toggling org form:", error);
             showToast('Failed to toggle form', 'error');
+        }
+    };
+
+    const handleUpdateUserRole = async (uid: string, newRole: 'player' | 'organizer' | 'admin') => {
+        try {
+            await updateDoc(doc(db, 'users', uid), { role: newRole });
+            setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role: newRole } : u));
+            setOrganizers(prev => {
+                const updated = prev.map(u => u.uid === uid ? { ...u, role: newRole } : u);
+                if (newRole === 'player') return updated.filter(u => u.uid !== uid);
+                return updated;
+            });
+            showToast(`User role updated to ${newRole}`, 'success');
+        } catch (error) {
+            console.error("Error updating user role:", error);
+            showToast('Failed to update role', 'error');
         }
     };
 
@@ -942,6 +970,17 @@ const AdminPanel: React.FC = () => {
                         >
                             <Layout className={`w-5 h-5 ${activeTab === 'tab-dashboard' ? 'text-white' : 'text-gray-500'}`} />
                             Dashboard
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('tab-users')} 
+                            className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                activeTab === 'tab-users' 
+                                    ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+                                    : 'text-gray-400 hover:bg-dark hover:text-white'
+                            }`}
+                        >
+                            <Users className={`w-5 h-5 ${activeTab === 'tab-users' ? 'text-white' : 'text-gray-500'}`} />
+                            Manage Users
                         </button>
                     </div>
                 </div>
@@ -1172,10 +1211,16 @@ const AdminPanel: React.FC = () => {
                                                     <span className="text-gray-500">User ID</span>
                                                     <span className="text-gray-400 text-[10px]">{selectedTx.userId}</span>
                                                 </div>
-                                                <div className="flex justify-between pb-1">
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
                                                     <span className="text-gray-500">Ref ID</span>
                                                     <span className="text-brand-300 text-xs">{selectedTx.refId}</span>
                                                 </div>
+                                                {selectedTx.confirmedByUsername && (
+                                                    <div className="flex justify-between border-b border-gray-800/50 pb-2">
+                                                        <span className="text-brand-400">Confirmed By</span>
+                                                        <span className="text-brand-300">{selectedTx.confirmedByUsername}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                             
                                             {selectedTx.accountDetails && (
@@ -1276,9 +1321,11 @@ const AdminPanel: React.FC = () => {
                                                 <button onClick={() => {
                                                     setEditingSlide(s);
                                                     setSlideTitle(s.title);
+                                                    setSlideDescription(s.description || '');
                                                     setSlideImage(s.imageUrl);
                                                     setSlideLink(s.link);
                                                     setSlideBtnText(s.buttonText);
+                                                    setSlideIsActive(s.isActive);
                                                     setIsSlideModalOpen(true);
                                                 }} className="text-blue-400 hover:text-white"><Edit className="w-4 h-4" /></button>
                                                 <button onClick={() => handleDeleteSlide(s.id)} className="text-red-400 hover:text-white"><Trash className="w-4 h-4" /></button>
@@ -1302,6 +1349,10 @@ const AdminPanel: React.FC = () => {
                                     <div>
                                         <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Title</label>
                                         <input type="text" value={slideTitle} onChange={e => setSlideTitle(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Description</label>
+                                        <textarea value={slideDescription} onChange={e => setSlideDescription(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none h-20 resize-none" placeholder="Short description for the slide..." />
                                     </div>
                                     <div>
                                         <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Image (Paste or Drop)</label>
@@ -1342,6 +1393,16 @@ const AdminPanel: React.FC = () => {
                                     <div>
                                         <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Button Text</label>
                                         <input type="text" value={slideBtnText} onChange={e => setSlideBtnText(e.target.value)} className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none" />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox" 
+                                            id="slideIsActive"
+                                            checked={slideIsActive} 
+                                            onChange={e => setSlideIsActive(e.target.checked)} 
+                                            className="w-4 h-4 rounded border-gray-700 bg-dark text-brand-600 focus:ring-brand-500"
+                                        />
+                                        <label htmlFor="slideIsActive" className="text-xs text-gray-300 font-bold uppercase cursor-pointer">Active Status</label>
                                     </div>
                                 </div>
                                 <div className="flex gap-3 pt-4">
@@ -1407,6 +1468,17 @@ const AdminPanel: React.FC = () => {
                                                         title="Edit Tournament"
                                                     >
                                                         <Edit className="w-3 h-3" />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleToggleFeatured(t)}
+                                                        className={`p-1.5 rounded-lg transition-all border ${
+                                                            t.isFeatured 
+                                                                ? 'bg-yellow-600/20 text-yellow-500 border-yellow-500/30 hover:bg-yellow-600 hover:text-white' 
+                                                                : 'bg-gray-600/20 text-gray-400 border-gray-500/30 hover:bg-gray-600 hover:text-white'
+                                                        }`}
+                                                        title={t.isFeatured ? "Unfeature" : "Feature"}
+                                                    >
+                                                        <Megaphone className="w-3 h-3" />
                                                     </button>
                                                     {t.status !== 'cancelled' && t.status !== 'completed' && (
                                                         <button 
@@ -1532,6 +1604,17 @@ const AdminPanel: React.FC = () => {
                                                     >
                                                         <Edit className="w-3 h-3" />
                                                     </button>
+                                                    <button 
+                                                        onClick={() => handleToggleFeatured(t)}
+                                                        className={`p-1.5 rounded-lg transition-all border ${
+                                                            t.isFeatured 
+                                                                ? 'bg-yellow-600/20 text-yellow-500 border-yellow-500/30 hover:bg-yellow-600 hover:text-white' 
+                                                                : 'bg-gray-600/20 text-gray-400 border-gray-500/30 hover:bg-gray-600 hover:text-white'
+                                                        }`}
+                                                        title={t.isFeatured ? "Unfeature" : "Feature"}
+                                                    >
+                                                        <Megaphone className="w-3 h-3" />
+                                                    </button>
                                                     {t.status !== 'cancelled' && t.status !== 'completed' && (
                                                         <button 
                                                             onClick={() => handleCancelTournament(t)}
@@ -1562,6 +1645,102 @@ const AdminPanel: React.FC = () => {
                 </div>
             )}
 
+            {activeTab === 'tab-users' && (
+                <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-700 pb-4">
+                        <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                            <Users className="text-brand-500" /> Manage Users
+                        </h2>
+                        <div className="relative w-full md:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
+                            <input 
+                                type="text"
+                                placeholder="Search users..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:border-brand-500 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="text-[10px] text-gray-500 uppercase font-black tracking-widest border-b border-gray-800">
+                                    <th className="px-4 py-4">User</th>
+                                    <th className="px-4 py-4">Role</th>
+                                    <th className="px-4 py-4">Balance</th>
+                                    <th className="px-4 py-4">Status</th>
+                                    <th className="px-4 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-800/50">
+                                {users
+                                    .filter(u => 
+                                        u.username.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                        u.email.toLowerCase().includes(searchQuery.toLowerCase())
+                                    )
+                                    .map(u => (
+                                    <tr key={u.uid} className="hover:bg-white/[0.02] transition-colors">
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-brand-600/20 rounded-lg flex items-center justify-center border border-brand-500/30">
+                                                    <Users className="text-brand-500 w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-bold text-white">{u.username}</div>
+                                                    <div className="text-[10px] text-gray-500">{u.email}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <select 
+                                                value={u.role}
+                                                onChange={(e) => handleUpdateUserRole(u.uid, e.target.value as any)}
+                                                className="bg-dark border border-gray-700 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-brand-500"
+                                            >
+                                                <option value="player">Player</option>
+                                                <option value="organizer">Organizer</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <div className="text-sm font-mono font-bold text-white">{formatCurrency(u.balance)}</div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${u.isBanned ? 'bg-red-600/20 text-red-400' : 'bg-green-600/20 text-green-400'}`}>
+                                                {u.isBanned ? 'Banned' : 'Active'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button 
+                                                    onClick={() => setSelectedUser(u)}
+                                                    className="p-1.5 bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded-lg transition-all"
+                                                    title="Manage Balance & Role"
+                                                >
+                                                    <Edit className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleSuspendOrg(u.uid, !u.isBanned)}
+                                                    className={`p-1.5 rounded-lg border transition-all ${
+                                                        u.isBanned 
+                                                            ? 'bg-green-600/20 text-green-400 border-green-500/30 hover:bg-green-600 hover:text-white' 
+                                                            : 'bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600 hover:text-white'
+                                                    }`}
+                                                >
+                                                    {u.isBanned ? <CheckCircle className="w-3.5 h-3.5" /> : <Trash className="w-3.5 h-3.5" />}
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'tab-organizers' && (
                 <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
                     <div className="flex justify-between items-center border-b border-gray-700 pb-4">
@@ -1580,7 +1759,10 @@ const AdminPanel: React.FC = () => {
                                         </div>
                                         <div>
                                             <h3 className="font-bold text-white">{org.username}</h3>
-                                            <p className="text-[10px] text-gray-500 uppercase font-bold">{org.orgName || 'No Org Name'}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-[10px] text-gray-500 uppercase font-bold">{org.orgName || 'No Org Name'}</p>
+                                                <span className="text-[8px] bg-brand-600/10 text-brand-400 px-1.5 py-0.5 rounded border border-brand-500/20 uppercase font-black">{org.role}</span>
+                                            </div>
                                             <button
                                                 onClick={() => togglePowerOrganizer(org)}
                                                 className={`mt-1 flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded ${org.isPowerOrganizer ? 'bg-green-600/20 text-green-500' : 'bg-gray-600/20 text-gray-500'}`}
@@ -1896,125 +2078,6 @@ const AdminPanel: React.FC = () => {
                         </div>
                     </div>
                 )}
-
-            {activeTab === 'tab-users' && (
-                <div className="bg-card p-6 rounded-xl border border-gray-800">
-                    <div className="flex gap-2 mb-6">
-                        <input 
-                            type="text" 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search by Username..." 
-                            className="flex-grow bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none"
-                        />
-                        <button onClick={handleSearchUsers} className="bg-brand-600 px-6 rounded-lg font-bold text-white flex items-center gap-2">
-                            <Search className="w-4 h-4" /> Search
-                        </button>
-                    </div>
-                    <div className="space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                        {users.length > 0 ? (
-                            users.map(u => (
-                                <div key={u.uid} className="bg-gray-900 p-3 rounded mb-2 border border-gray-700 flex justify-between items-center">
-                                    <div>
-                                        <div className="font-bold text-white">{u.username} <span className="text-xs text-gray-500">({u.role})</span></div>
-                                        <div className="text-xs text-gray-400">{u.email} | Bal: {formatCurrency(u.balance)}</div>
-                                        <div className="text-[10px] text-gray-600">UID: {u.uid}</div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => setSelectedUser(u)} className="bg-blue-600 px-3 py-1 rounded text-xs text-white">Manage</button>
-                                        <button 
-                                            onClick={() => {
-                                                setConfirmModal({
-                                                    isOpen: true,
-                                                    title: u.isBanned ? 'Unblock User' : 'Block User',
-                                                    message: `Are you sure you want to ${u.isBanned ? 'unblock' : 'block'} ${u.username}?`,
-                                                    isDestructive: true,
-                                                    onConfirm: async () => {
-                                                        try {
-                                                            await updateDoc(doc(db, 'users', u.uid), { isBanned: !u.isBanned });
-                                                            setUsers(prev => prev.map(user => user.uid === u.uid ? { ...user, isBanned: !u.isBanned } : user));
-                                                            showToast(`User ${u.isBanned ? 'unblocked' : 'blocked'}`, 'success');
-                                                        } catch (error) {
-                                                            console.error("Error updating user status:", error);
-                                                            showToast('Failed to update user status', 'error');
-                                                        }
-                                                        closeConfirmModal();
-                                                    }
-                                                });
-                                            }}
-                                            className={`px-3 py-1 rounded text-xs font-bold ${u.isBanned ? 'bg-green-600 hover:bg-green-500' : 'bg-red-600 hover:bg-red-500'} text-white`}
-                                        >
-                                            {u.isBanned ? 'Unblock' : 'Block'}
-                                        </button>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-gray-500 text-center py-10">Search for a user to manage their account.</p>
-                        )}
-                    </div>
-
-                    {selectedUser && (
-                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                            <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
-                                <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-                                    <h3 className="text-xl font-bold text-white uppercase tracking-widest">Manage User</h3>
-                                    <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-white"><X /></button>
-                                </div>
-
-                                <div className="bg-dark p-4 rounded-xl border border-gray-800">
-                                    <div className="text-white font-bold">{selectedUser.username}</div>
-                                    <div className="text-sm text-gray-400">{selectedUser.email}</div>
-                                    <div className="text-sm text-brand-400 mt-2 font-mono">Current Balance: {formatCurrency(selectedUser.balance)}</div>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <label className="text-xs text-gray-500 uppercase font-bold block">Adjust Balance</label>
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => setAdjustmentType('add')}
-                                            className={`flex-1 py-2 rounded-lg font-bold text-xs uppercase border ${adjustmentType === 'add' ? 'bg-green-600 border-green-500 text-white' : 'bg-dark border-gray-700 text-gray-500'}`}
-                                        >
-                                            Add
-                                        </button>
-                                        <button 
-                                            onClick={() => setAdjustmentType('subtract')}
-                                            className={`flex-1 py-2 rounded-lg font-bold text-xs uppercase border ${adjustmentType === 'subtract' ? 'bg-red-600 border-red-500 text-white' : 'bg-dark border-gray-700 text-gray-500'}`}
-                                        >
-                                            Subtract
-                                        </button>
-                                    </div>
-                                    <input 
-                                        type="number" 
-                                        value={adjustmentAmount}
-                                        onChange={(e) => setAdjustmentAmount(e.target.value)}
-                                        placeholder="Enter amount..."
-                                        className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none"
-                                    />
-                                    <button onClick={handleAdjustBalance} className="w-full bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition uppercase text-sm">
-                                        Confirm Adjustment
-                                    </button>
-                                </div>
-
-                                <div className="space-y-4 border-t border-gray-800 pt-6">
-                                    <label className="text-xs text-gray-500 uppercase font-bold block">Update Role</label>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {(['player', 'organizer', 'admin'] as const).map(role => (
-                                            <button 
-                                                key={role}
-                                                onClick={() => handleUpdateUserRole(selectedUser.uid, role)}
-                                                className={`py-2 rounded-lg font-bold text-[10px] uppercase border transition-all ${selectedUser.role === role ? 'bg-brand-600 border-brand-500 text-white' : 'bg-dark border-gray-700 text-gray-500 hover:border-gray-600'}`}
-                                            >
-                                                {role}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
 
             {activeTab === 'tab-games' && (
                 <div className="space-y-6">
@@ -2527,6 +2590,66 @@ const AdminPanel: React.FC = () => {
                 }}
                 editTournament={selectedTournament}
             />
+
+            {selectedUser && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-card w-full max-w-md rounded-2xl border border-gray-800 p-6 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
+                        <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+                            <h3 className="text-xl font-bold text-white uppercase tracking-widest">Manage User</h3>
+                            <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-white bg-dark p-2 rounded-full transition"><X className="w-5 h-5" /></button>
+                        </div>
+
+                        <div className="bg-dark p-4 rounded-xl border border-gray-800">
+                            <div className="text-white font-bold">{selectedUser.username}</div>
+                            <div className="text-sm text-gray-400">{selectedUser.email}</div>
+                            <div className="text-sm text-brand-400 mt-2 font-mono">Current Balance: {formatCurrency(selectedUser.balance)}</div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-xs text-gray-500 uppercase font-bold block">Adjust Balance</label>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => setAdjustmentType('add')}
+                                    className={`flex-1 py-2 rounded-lg font-bold text-xs uppercase border ${adjustmentType === 'add' ? 'bg-green-600 border-green-500 text-white' : 'bg-dark border-gray-700 text-gray-500'}`}
+                                >
+                                    Add
+                                </button>
+                                <button 
+                                    onClick={() => setAdjustmentType('subtract')}
+                                    className={`flex-1 py-2 rounded-lg font-bold text-xs uppercase border ${adjustmentType === 'subtract' ? 'bg-red-600 border-red-500 text-white' : 'bg-dark border-gray-700 text-gray-500'}`}
+                                >
+                                    Subtract
+                                </button>
+                            </div>
+                            <input 
+                                type="number" 
+                                value={adjustmentAmount}
+                                onChange={(e) => setAdjustmentAmount(e.target.value)}
+                                placeholder="Enter amount..."
+                                className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none"
+                            />
+                            <button onClick={handleAdjustBalance} className="w-full bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition uppercase text-sm">
+                                Confirm Adjustment
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 border-t border-gray-800 pt-6">
+                            <label className="text-xs text-gray-500 uppercase font-bold block">Update Role</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {(['player', 'organizer', 'admin'] as const).map(role => (
+                                    <button 
+                                        key={role}
+                                        onClick={() => handleUpdateUserRole(selectedUser.uid, role)}
+                                        className={`py-2 rounded-lg font-bold text-[10px] uppercase border transition-all ${selectedUser.role === role ? 'bg-brand-600 border-brand-500 text-white' : 'bg-dark border-gray-700 text-gray-500 hover:border-gray-600'}`}
+                                    >
+                                        {role}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <ConfirmModal
                 isOpen={confirmModal.isOpen}

@@ -5,7 +5,7 @@ import { updateEmail, sendPasswordResetEmail } from 'firebase/auth';
 import { db, storage, auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatDate, calculateLevel, getLevelProgress, getXPForNextLevel } from '../utils';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../components/ConfirmModal';
 import Modal from '../components/Modal';
@@ -409,6 +409,12 @@ const Profile: React.FC = () => {
                     >
                         Activity
                     </button>
+                    <button 
+                        onClick={() => setShowSettingsModal(true)}
+                        className="px-6 py-4 font-black text-xs uppercase tracking-widest text-gray-500 hover:text-white transition border-t-2 border-transparent flex items-center gap-2"
+                    >
+                        <SettingsIcon className="w-4 h-4" /> Settings
+                    </button>
                 </div>
             </div>
 
@@ -416,14 +422,14 @@ const Profile: React.FC = () => {
                 <div className="space-y-6">
                     {/* Stats Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div onClick={() => navigate('/wallet')} className="bg-card p-6 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg">
+                        <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg">
                             <div className="flex items-center gap-3 mb-3">
                                 <div className="p-2 bg-green-500/10 rounded-lg border border-green-500/20 text-green-400">
                                     <WalletIcon className="w-5 h-5" />
                                 </div>
                                 <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Wallet Balance</span>
                             </div>
-                            <div className="text-2xl font-black text-white group-hover:text-brand-400 transition">{formatCurrency(profile.balance)}</div>
+                            <div className="text-2xl font-black text-white">{formatCurrency(profile.balance)}</div>
                         </div>
                         <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg">
                             <div className="flex items-center gap-3 mb-3">
@@ -433,6 +439,21 @@ const Profile: React.FC = () => {
                                 <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Total Earnings</span>
                             </div>
                             <div className="text-2xl font-black text-white">{formatCurrency(profile.totalEarnings || 0)}</div>
+                        </div>
+                        <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg relative overflow-hidden group">
+                            <div className="absolute top-0 left-0 h-1 bg-brand-500 transition-all duration-1000" style={{ width: `${getLevelProgress(profile.xp)}%` }}></div>
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="p-2 bg-brand-500/10 rounded-lg border border-brand-500/20 text-brand-400">
+                                    <Shield className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Player Level</span>
+                            </div>
+                            <div className="flex items-end justify-between">
+                                <div className="text-2xl font-black text-white">LVL {calculateLevel(profile.xp)}</div>
+                                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                                    {profile.xp || 0} / {getXPForNextLevel(calculateLevel(profile.xp))} XP
+                                </div>
+                            </div>
                         </div>
                         <div onClick={() => navigate('/teams')} className="bg-card p-6 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg">
                             <div className="flex items-center gap-3 mb-3">

@@ -13,7 +13,6 @@ const Breadcrumbs: React.FC = () => {
         'games': 'Games',
         'details': 'Tournament Details',
         'dashboard': 'Dashboard',
-        'wallet': 'Wallet',
         'profile': 'Profile',
         'user': 'User',
         'teams': 'Teams',

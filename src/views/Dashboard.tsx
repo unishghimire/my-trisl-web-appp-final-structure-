@@ -144,24 +144,30 @@ const Dashboard: React.FC = () => {
 
             <h2 className="text-2xl font-bold mb-6 text-white border-b border-gray-800 pb-4">My Dashboard</h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div onClick={() => navigate('/profile')} className="bg-card p-6 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
-                        <User className="w-6 h-6 text-brand-500" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div onClick={() => navigate('/profile')} className="bg-card p-4 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex flex-col items-center text-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
+                        <User className="w-5 h-5 text-brand-500" />
                     </div>
-                    <div>
-                        <h3 className="text-white font-black uppercase tracking-widest text-sm group-hover:text-brand-400 transition">My Profile</h3>
-                        <p className="text-gray-500 text-xs font-bold">Manage your account</p>
-                    </div>
+                    <h3 className="text-white font-black uppercase tracking-widest text-[10px] group-hover:text-brand-400 transition">Profile</h3>
                 </div>
-                <div onClick={() => navigate('/teams')} className="bg-card p-6 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
-                        <Users className="w-6 h-6 text-brand-500" />
+                <div onClick={() => navigate('/teams')} className="bg-card p-4 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex flex-col items-center text-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
+                        <Users className="w-5 h-5 text-brand-500" />
                     </div>
-                    <div>
-                        <h3 className="text-white font-black uppercase tracking-widest text-sm group-hover:text-brand-400 transition">My Teams</h3>
-                        <p className="text-gray-500 text-xs font-bold">{myTeams.length} Active Teams</p>
+                    <h3 className="text-white font-black uppercase tracking-widest text-[10px] group-hover:text-brand-400 transition">Teams</h3>
+                </div>
+                <div onClick={() => navigate('/tournaments')} className="bg-card p-4 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex flex-col items-center text-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
+                        <Trophy className="w-5 h-5 text-brand-500" />
                     </div>
+                    <h3 className="text-white font-black uppercase tracking-widest text-[10px] group-hover:text-brand-400 transition">My Tournaments</h3>
+                </div>
+                <div onClick={() => navigate('/leaderboard')} className="bg-card p-4 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex flex-col items-center text-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
+                        <BarChart className="w-5 h-5 text-brand-500" />
+                    </div>
+                    <h3 className="text-white font-black uppercase tracking-widest text-[10px] group-hover:text-brand-400 transition">Leaderboard</h3>
                 </div>
             </div>
 

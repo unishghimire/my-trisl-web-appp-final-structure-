@@ -649,7 +649,9 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
       </div>
 
       <div className="min-h-[350px]">
-        {renderStep()}
+        <AnimatePresence mode="wait">
+          {renderStep()}
+        </AnimatePresence>
       </div>
 
       <div className="flex justify-between mt-8 pt-6 border-t border-gray-800">

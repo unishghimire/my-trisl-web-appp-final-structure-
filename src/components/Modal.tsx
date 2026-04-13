@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 
 interface ModalProps {
     isOpen: boolean;
@@ -10,6 +11,14 @@ interface ModalProps {
 }
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidth = 'sm:max-w-lg' }) => {
+    const location = useLocation();
+
+    useEffect(() => {
+        if (isOpen) {
+            onClose();
+        }
+    }, [location.pathname]);
+
     if (!isOpen) return null;
 
     return (

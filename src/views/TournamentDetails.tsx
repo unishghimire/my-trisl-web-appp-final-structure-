@@ -7,6 +7,8 @@ import { DEFAULT_BANNER } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency, formatDate, getYoutubeId } from '../utils';
 import { Clock, Users, Trophy, Lock, Eye, EyeOff, Play, Share2, Calendar, MapPin, Info, Medal, ExternalLink, ChevronRight, AlertCircle, CheckCircle2, Search, Filter, Building2 } from 'lucide-react';
+import RegistrationModal from '../components/RegistrationModal';
+import JoinTournamentModal from '../components/JoinTournamentModal';
 import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
 import { NotificationService } from '../services/NotificationService';
@@ -33,6 +35,7 @@ const TournamentDetails: React.FC = () => {
     const [relatedTournaments, setRelatedTournaments] = useState<Tournament[]>([]);
     const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
     const [showJoinModal, setShowJoinModal] = useState(false);
+    const [showRegistrationModal, setShowRegistrationModal] = useState(false);
     const [teammate1, setTeammate1] = useState('');
     const [teammate2, setTeammate2] = useState('');
     const [teammate3, setTeammate3] = useState('');
@@ -227,25 +230,25 @@ const TournamentDetails: React.FC = () => {
         if (tournament.teamType === 'duo' || tournament.teamType === 'squad') {
             setShowJoinModal(true);
         } else {
-            handleJoinSubmit();
+            setShowRegistrationModal(true);
         }
     };
 
-    const handleJoinSubmit = async () => {
-        if (!user || !tournament || !profile) return;
+    const handleJoinSuccess = () => {
+        setIsJoined(true);
+        // Refresh tournament data or just rely on the redirect to dashboard
+    };
 
-        if (tournament.teamType === 'duo' && !teammate1) {
-            showToast("Please provide your teammate's in-game name.", "warning");
+    const handleLeaveTournament = async () => {
+        if (!user || !tournament || !isJoined) return;
+        if (tournament.status !== 'upcoming') {
+            showToast("You cannot leave a tournament that has already started.", "error");
             return;
         }
-        if (tournament.teamType === 'squad' && (!teammate1 || !teammate2 || !teammate3)) {
-            showToast("Please provide all teammates' in-game names.", "warning");
-            return;
-        }
+        if (!window.confirm('Are you sure you want to leave this tournament? Your entry fee will be refunded.')) return;
 
         const tRef = doc(db, 'tournaments', tournament.id);
         const userRef = doc(db, 'users', user.uid);
-        const partRef = doc(collection(db, 'participants'));
 
         try {
             await runTransaction(db, async (transaction) => {
@@ -255,42 +258,32 @@ const TournamentDetails: React.FC = () => {
                 const tData = tDoc.data() as Tournament;
                 const uData = uDoc.data() as UserProfile;
 
-                if (tData.currentPlayers >= tData.slots) throw new Error("Tournament is Full!");
-                if (uData.balance < tData.entryFee) throw new Error("Insufficient Balance!");
+                // Find the participant record
+                const partQ = query(
+                    collection(db, 'participants'),
+                    where('tournamentId', '==', tournament.id),
+                    where('userId', '==', user.uid)
+                );
+                const pSnap = await getDocs(partQ);
+                if (pSnap.empty) throw new Error("Participant record not found!");
 
-                transaction.update(userRef, { balance: uData.balance - tData.entryFee });
-                transaction.update(tRef, { currentPlayers: tData.currentPlayers + 1 });
-                
-                const participantData: any = {
-                    userId: user.uid,
-                    tournamentId: tournament.id,
-                    inGameId: uData.inGameId,
-                    inGameName: uData.inGameName || '',
-                    teamName: uData.teamName || '',
-                    teamId: uData.teamId || '',
-                    username: uData.username,
-                    timestamp: serverTimestamp()
-                };
-
-                if (tData.teamType === 'duo') {
-                    participantData.teammates = [teammate1];
-                } else if (tData.teamType === 'squad') {
-                    participantData.teammates = [teammate1, teammate2, teammate3];
-                }
-
-                transaction.set(partRef, participantData);
+                // Refund entry fee
+                transaction.update(userRef, { balance: uData.balance + tData.entryFee });
+                // Decrement players
+                transaction.update(tRef, { currentPlayers: Math.max(0, tData.currentPlayers - 1) });
+                // Delete participant record
+                transaction.delete(doc(db, 'participants', pSnap.docs[0].id));
             });
-            setIsJoined(true);
-            setShowJoinModal(false);
+
+            setIsJoined(false);
             await NotificationService.create(
                 user.uid,
-                'Tournament Joined!',
-                `You have successfully joined ${tournament.title}. Good luck!`,
-                'success',
+                'Tournament Left',
+                `You have left ${tournament.title}. Your entry fee has been refunded.`,
+                'info',
                 `/details/${tournament.id}`
             );
-            showToast('Joined Successfully!', 'success');
-            navigate('/dashboard');
+            showToast('Left Tournament Successfully!', 'success');
         } catch (e: any) {
             showToast(e.message, 'error');
         }
@@ -836,6 +829,14 @@ const TournamentDetails: React.FC = () => {
                                         Join Discord
                                     </button>
                                 </div>
+                                {tournament.status === 'upcoming' && (
+                                    <button 
+                                        onClick={handleLeaveTournament}
+                                        className="w-full bg-red-600/10 hover:bg-red-600/20 text-red-500 py-4 rounded-xl text-xs font-black uppercase tracking-widest border border-red-500/20 transition-all"
+                                    >
+                                        Leave Tournament
+                                    </button>
+                                )}
                             </div>
                         ) : tournament.currentPlayers >= tournament.slots ? (
                             <button disabled className="w-full bg-red-900/20 text-red-500 border border-red-900/50 py-5 rounded-2xl font-black uppercase tracking-widest cursor-not-allowed">
@@ -857,96 +858,25 @@ const TournamentDetails: React.FC = () => {
                 </div>
             </div>
 
-            {showJoinModal && tournament && (
-                <Modal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} title={`Join ${tournament.teamType.toUpperCase()} Tournament`}>
-                    <div className="space-y-4">
-                        <p className="text-sm text-gray-400 mb-4">Please provide the in-game names of your teammates.</p>
-                        
-                        <div>
-                            <label className="text-xs text-gray-500 uppercase font-bold mb-2 block">Teammate 1 In-Game Name</label>
-                            {teamMembers.length > 0 ? (
-                                <select 
-                                    value={teammate1}
-                                    onChange={(e) => setTeammate1(e.target.value)}
-                                    className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
-                                >
-                                    <option value="">Select a teammate</option>
-                                    {teamMembers.map(m => (
-                                        <option key={m.userId} value={m.inGameName || m.username}>{m.inGameName || m.username}</option>
-                                    ))}
-                                </select>
-                            ) : (
-                                <input 
-                                    type="text" 
-                                    value={teammate1}
-                                    onChange={(e) => setTeammate1(e.target.value)}
-                                    className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
-                                    placeholder="Enter in-game name"
-                                />
-                            )}
-                        </div>
+            {showJoinModal && tournament && profile && (
+                <JoinTournamentModal 
+                    isOpen={showJoinModal}
+                    onClose={() => setShowJoinModal(false)}
+                    tournament={tournament}
+                    profile={profile}
+                    teamMembers={teamMembers}
+                    onSuccess={handleJoinSuccess}
+                />
+            )}
 
-                        {tournament.teamType === 'squad' && (
-                            <>
-                                <div>
-                                    <label className="text-xs text-gray-500 uppercase font-bold mb-2 block">Teammate 2 In-Game Name</label>
-                                    {teamMembers.length > 0 ? (
-                                        <select 
-                                            value={teammate2}
-                                            onChange={(e) => setTeammate2(e.target.value)}
-                                            className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
-                                        >
-                                            <option value="">Select a teammate</option>
-                                            {teamMembers.map(m => (
-                                                <option key={m.userId} value={m.inGameName || m.username}>{m.inGameName || m.username}</option>
-                                            ))}
-                                        </select>
-                                    ) : (
-                                        <input 
-                                            type="text" 
-                                            value={teammate2}
-                                            onChange={(e) => setTeammate2(e.target.value)}
-                                            className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
-                                            placeholder="Enter in-game name"
-                                        />
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="text-xs text-gray-500 uppercase font-bold mb-2 block">Teammate 3 In-Game Name</label>
-                                    {teamMembers.length > 0 ? (
-                                        <select 
-                                            value={teammate3}
-                                            onChange={(e) => setTeammate3(e.target.value)}
-                                            className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
-                                        >
-                                            <option value="">Select a teammate</option>
-                                            {teamMembers.map(m => (
-                                                <option key={m.userId} value={m.inGameName || m.username}>{m.inGameName || m.username}</option>
-                                            ))}
-                                        </select>
-                                    ) : (
-                                        <input 
-                                            type="text" 
-                                            value={teammate3}
-                                            onChange={(e) => setTeammate3(e.target.value)}
-                                            className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none font-bold"
-                                            placeholder="Enter in-game name"
-                                        />
-                                    )}
-                                </div>
-                            </>
-                        )}
-
-                        <div className="pt-4 flex gap-3">
-                            <button onClick={() => setShowJoinModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-bold transition uppercase text-sm">
-                                Cancel
-                            </button>
-                            <button onClick={handleJoinSubmit} className="flex-1 bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition uppercase text-sm">
-                                Confirm Join
-                            </button>
-                        </div>
-                    </div>
-                </Modal>
+            {showRegistrationModal && tournament && profile && (
+                <RegistrationModal 
+                    isOpen={showRegistrationModal}
+                    onClose={() => setShowRegistrationModal(false)}
+                    tournament={tournament}
+                    profile={profile}
+                    onSuccess={handleJoinSuccess}
+                />
             )}
         </div>
     );

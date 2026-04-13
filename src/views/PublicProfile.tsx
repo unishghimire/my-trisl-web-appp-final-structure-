@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { UserProfile, Team, Tournament, OrgPost } from '../types';
-import { Shield, Trophy, Briefcase, Users, ArrowLeft, CheckCircle2, Copy, UserPlus, UserMinus, Calendar, Share2, Eye, MessageSquare, Plus } from 'lucide-react';
+import { UserProfile, Team, Tournament, OrgPost, MatchHistory } from '../types';
+import { Shield, Trophy, Briefcase, Users, ArrowLeft, CheckCircle2, Copy, UserPlus, UserMinus, Calendar, Share2, Eye, MessageSquare, Plus, Star, Activity, Award, Zap, ChevronRight } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
 import Modal from '../components/Modal';
-import { formatDate } from '../utils';
+import { formatDate, timeAgo } from '../utils';
+import { motion } from 'motion/react';
 
 const PublicProfile: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const { user } = useAuth();
     const { showToast } = useNotification();
     
@@ -19,6 +21,7 @@ const PublicProfile: React.FC = () => {
     const [teams, setTeams] = useState<Team[]>([]);
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [orgPosts, setOrgPosts] = useState<OrgPost[]>([]);
+    const [matchHistory, setMatchHistory] = useState<MatchHistory[]>([]);
     const [loading, setLoading] = useState(true);
     const [copiedId, setCopiedId] = useState(false);
     const [isFollowing, setIsFollowing] = useState(false);
@@ -26,7 +29,6 @@ const PublicProfile: React.FC = () => {
     const [followLoading, setFollowLoading] = useState(false);
     const [followerCount, setFollowerCount] = useState(0);
     const [followingCount, setFollowingCount] = useState(0);
-    const [stats, setStats] = useState({ tournamentsJoined: 0, totalWinnings: 0, winRate: 0 });
 
     // Create Post Modal State
     const [showCreatePost, setShowCreatePost] = useState(false);
@@ -72,15 +74,11 @@ const PublicProfile: React.FC = () => {
                     setTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
                 }));
 
-                // 4. Fetch Stats
-                promises.push(getDocs(query(collection(db, 'participants'), where('userId', '==', id))).then(partSnap => {
-                    const tournamentsJoined = partSnap.size;
-                    getDocs(query(collection(db, 'transactions'), where('userId', '==', id), where('type', '==', 'prize'))).then(txSnap => {
-                        let totalWinnings = 0;
-                        txSnap.forEach(doc => totalWinnings += doc.data().amount);
-                        const winRate = tournamentsJoined > 0 ? (txSnap.size / tournamentsJoined) * 100 : 0;
-                        setStats({ tournamentsJoined, totalWinnings, winRate });
-                    });
+                // 4. Fetch Match History
+                promises.push(getDocs(query(collection(db, 'match_history'), where('userId', '==', id))).then(snap => {
+                    const matches = snap.docs.map(d => ({ id: d.id, ...d.data() } as MatchHistory));
+                    matches.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+                    setMatchHistory(matches);
                 }));
 
                 // 5. Fetch Follow Data
@@ -100,8 +98,7 @@ const PublicProfile: React.FC = () => {
                 if (profileData.role === 'organizer') {
                     promises.push(getDocs(query(collection(db, 'org_posts'), where('orgId', '==', id))).then(snap => {
                         const posts = snap.docs.map(d => ({ id: d.id, ...d.data() } as OrgPost));
-                        // Sort locally since we don't have a composite index for orgId + createdAt yet
-                        posts.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+                        posts.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
                         setOrgPosts(posts);
                     }));
                 }
@@ -135,9 +132,7 @@ const PublicProfile: React.FC = () => {
             };
             
             const docRef = await addDoc(collection(db, 'org_posts'), newPost);
-            
-            // Add to local state
-            setOrgPosts(prev => [{ id: docRef.id, ...newPost, createdAt: { seconds: Date.now() / 1000 } } as OrgPost, ...prev]);
+            setOrgPosts(prev => [{ id: docRef.id, ...newPost, createdAt: serverTimestamp() } as OrgPost, ...prev]);
             
             showToast('Announcement posted successfully!', 'success');
             setShowCreatePost(false);
@@ -173,7 +168,6 @@ const PublicProfile: React.FC = () => {
                 setFollowerCount(prev => prev + 1);
                 showToast('Following user', 'success');
                 
-                // Send notification
                 await addDoc(collection(db, 'notifications'), {
                     userId: id,
                     title: 'New Follower',
@@ -231,269 +225,247 @@ const PublicProfile: React.FC = () => {
         );
     }
 
+    const isRankOne = profile.rank === '1' || profile.points === 10000; // Mock check for #1
+
     return (
-        <div className="max-w-3xl mx-auto animate-fade-in pb-20">
+        <div className="max-w-5xl mx-auto animate-fade-in pb-20 px-4">
             <Helmet>
                 <title>{profile.username} | NexPlay Profile</title>
-                <meta name="description" content={`View ${profile.username}'s profile on NexPlay. Tournaments joined: ${stats.tournamentsJoined}.`} />
             </Helmet>
-            {/* Header Card */}
-            <div className="bg-card rounded-2xl border border-gray-800 overflow-hidden shadow-2xl mb-6">
+
+            {/* Breadcrumbs & Back Button */}
+            <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-500">
+                    <Link to="/leaderboard" className="hover:text-brand-400 transition">Leaderboard</Link>
+                    <ChevronRight className="w-3 h-3" />
+                    <span className="text-white">Player Profile</span>
+                </div>
+                <button 
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 text-gray-400 hover:text-white font-bold text-xs uppercase tracking-widest transition"
+                >
+                    <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+            </div>
+
+            {/* Profile Hero Section */}
+            <div className="bg-card rounded-3xl border border-gray-800 overflow-hidden shadow-2xl mb-8 relative">
                 <div 
-                    className="h-32 bg-gradient-to-r from-brand-900 via-purple-900 to-black relative bg-cover bg-center"
+                    className="h-48 bg-gradient-to-r from-brand-900 via-purple-900 to-black relative bg-cover bg-center"
                     style={profile.bannerUrl ? { backgroundImage: `url(${profile.bannerUrl})` } : {}}
                 >
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
                     <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
                 </div>
+                
                 <div className="px-8 pb-8 relative">
-                    <div className="flex flex-col md:flex-row items-end gap-6 -mt-12 relative z-10">
-                        <div className="relative group">
-                            <div className="w-32 h-32 rounded-2xl border-4 border-card bg-dark overflow-hidden shadow-xl flex items-center justify-center bg-gradient-to-br from-brand-600 to-purple-800 text-4xl font-black text-white relative">
+                    <div className="flex flex-col md:flex-row items-end gap-8 -mt-16 relative z-10">
+                        <div className="relative">
+                            <div className={`w-40 h-40 rounded-3xl border-4 ${isRankOne ? 'border-yellow-500 shadow-yellow-500/20' : 'border-card'} bg-dark overflow-hidden shadow-2xl flex items-center justify-center bg-gradient-to-br from-brand-600 to-purple-800 text-5xl font-black text-white`}>
                                 {profile.profilePicUrl ? (
                                     <img src={profile.profilePicUrl || undefined} className="w-full h-full object-cover" alt="Avatar" />
                                 ) : (
                                     profile.username[0].toUpperCase()
                                 )}
                             </div>
-                            <div className={`absolute bottom-2 right-2 w-5 h-5 rounded-full border-2 border-card ${getStatusColor(profile.status || 'online')}`}></div>
+                            {isRankOne && (
+                                <div className="absolute -top-4 -right-4 bg-yellow-500 text-black p-2 rounded-full shadow-lg border-4 border-card">
+                                    <Star className="w-6 h-6 fill-current" />
+                                </div>
+                            )}
+                            <div className={`absolute bottom-2 right-2 w-6 h-6 rounded-full border-4 border-card ${getStatusColor(profile.status || 'online')}`}></div>
                         </div>
+
                         <div className="flex-grow pb-2 w-full">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                                 <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <h2 className="text-3xl font-black text-white tracking-tight">{profile.username}</h2>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <h1 className="text-4xl font-black text-white tracking-tight">{profile.username}</h1>
+                                        {profile.isVerified && <CheckCircle2 className="w-6 h-6 text-blue-400 fill-blue-400/10" />}
+                                        {profile.isChampion && <Award className="w-6 h-6 text-yellow-500" />}
                                     </div>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="text-xs text-gray-500 font-mono bg-dark px-2 py-1 rounded border border-gray-800 flex items-center gap-2">
-                                            ID: {id}
-                                            <button onClick={handleCopyId} aria-label="Copy User ID" className="hover:text-white transition">
-                                                {copiedId ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                                            </button>
+                                    
+                                    <div className="flex flex-wrap items-center gap-3 mb-4">
+                                        <span className="text-[10px] font-black uppercase tracking-widest bg-brand-500/20 text-brand-400 px-3 py-1 rounded-full border border-brand-500/30 flex items-center gap-1">
+                                            <Zap className="w-3 h-3" /> Rank #{profile.rank || 'Unranked'}
                                         </span>
-                                        {profile.customActivity && (
-                                            <span className="text-xs text-brand-300 bg-brand-500/10 px-2 py-1 rounded border border-brand-500/20">
-                                                {profile.customActivity}
-                                            </span>
-                                        )}
+                                        <span className="text-[10px] font-black uppercase tracking-widest bg-gray-800 text-gray-400 px-3 py-1 rounded-full border border-gray-700">
+                                            {profile.role}
+                                        </span>
+                                        <button onClick={handleCopyId} className="text-[10px] font-mono text-gray-500 hover:text-white transition bg-dark px-3 py-1 rounded-full border border-gray-800 flex items-center gap-2">
+                                            ID: {id?.slice(0, 8)}... {copiedId ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                                        </button>
                                     </div>
-                                    <div className="flex items-center gap-4 text-sm font-bold text-gray-400">
-                                        <div><span className="text-white">{followerCount}</span> Followers</div>
-                                        <div><span className="text-white">{followingCount}</span> Following</div>
+
+                                    <div className="flex items-center gap-6 text-sm font-bold text-gray-400">
+                                        <div className="flex items-center gap-2"><Users className="w-4 h-4" /> <span className="text-white">{followerCount}</span> Followers</div>
+                                        <div className="flex items-center gap-2"><Activity className="w-4 h-4" /> <span className="text-white">{followingCount}</span> Following</div>
                                     </div>
                                 </div>
-                                {user && user.uid !== id && profile.role === 'organizer' && (
-                                    <button 
-                                        onClick={handleToggleFollow}
-                                        disabled={followLoading}
-                                        className={`shrink-0 px-6 py-2 rounded-xl font-black uppercase tracking-widest text-xs transition shadow-lg flex items-center gap-2 ${
-                                            isFollowing 
-                                                ? 'bg-gray-800 hover:bg-red-900/50 text-gray-300 hover:text-red-400 border border-gray-700 hover:border-red-500/50' 
-                                                : 'bg-brand-600 hover:bg-brand-500 text-white'
-                                        }`}
-                                    >
-                                        {isFollowing ? (
-                                            <><UserMinus className="w-4 h-4" /> Unfollow</>
-                                        ) : (
-                                            <><UserPlus className="w-4 h-4" /> Follow</>
-                                        )}
+
+                                <div className="flex items-center gap-3">
+                                    {user && user.uid !== id && (
+                                        <button 
+                                            onClick={handleToggleFollow}
+                                            disabled={followLoading}
+                                            className={`px-8 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition shadow-xl flex items-center gap-2 ${
+                                                isFollowing 
+                                                    ? 'bg-gray-800 hover:bg-red-900/50 text-gray-300 hover:text-red-400 border border-gray-700' 
+                                                    : 'bg-brand-600 hover:bg-brand-500 text-white'
+                                            }`}
+                                        >
+                                            {isFollowing ? <><UserMinus className="w-4 h-4" /> Unfollow</> : <><UserPlus className="w-4 h-4" /> Follow</>}
+                                        </button>
+                                    )}
+                                    <button className="p-3 bg-gray-800 hover:bg-gray-700 text-white rounded-2xl transition border border-gray-700">
+                                        <Share2 className="w-5 h-5" />
                                     </button>
-                                )}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-2 space-y-6">
-                    {/* Bio & Skills */}
-                    <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
-                        <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 border-b border-gray-800 pb-2">About</h3>
-                        <p className="text-gray-400 text-sm leading-relaxed mb-6">
-                            {profile.bio || 'This user has not provided a bio yet.'}
-                        </p>
-                        
-                        {profile.skills && profile.skills.length > 0 && (
-                            <div>
-                                <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                    <Briefcase className="w-4 h-4" /> Skills
-                                </h4>
-                                <div className="flex flex-wrap gap-2">
-                                    {profile.skills.map((skill, index) => (
-                                        <span key={index} className="bg-dark border border-gray-700 text-brand-400 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">
-                                            {skill}
-                                        </span>
-                                    ))}
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                {[
+                    { label: 'Total Points', value: profile.points || 0, icon: Star, color: 'text-yellow-500' },
+                    { label: 'Wins', value: profile.wins || 0, icon: Trophy, color: 'text-brand-500' },
+                    { label: 'Win Rate', value: `${profile.winRate || 0}%`, icon: Activity, color: 'text-green-500' },
+                    { label: 'Tournaments', value: profile.tournamentsPlayed || 0, icon: Calendar, color: 'text-blue-500' }
+                ].map((stat, i) => (
+                    <div key={i} className="bg-card p-6 rounded-3xl border border-gray-800 shadow-lg hover:border-gray-700 transition group">
+                        <div className={`p-2 rounded-xl bg-white/5 w-fit mb-3 group-hover:scale-110 transition-transform`}>
+                            <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                        </div>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">{stat.label}</p>
+                        <p className="text-2xl font-black text-white">{stat.value}</p>
+                    </div>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                    {/* Match History */}
+                    <div className="bg-card rounded-3xl border border-gray-800 overflow-hidden shadow-xl">
+                        <div className="p-6 border-b border-gray-800 flex items-center justify-between">
+                            <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                <Activity className="w-5 h-5 text-brand-500" /> Recent Matches
+                            </h3>
+                        </div>
+                        <div className="divide-y divide-gray-800">
+                            {matchHistory.length > 0 ? (
+                                matchHistory.map((match) => (
+                                    <div key={match.id} className="p-6 hover:bg-white/5 transition flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black uppercase text-xs ${match.result === 'victory' ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-red-500/20 text-red-500 border border-red-500/30'}`}>
+                                                {match.result === 'victory' ? 'Win' : 'Loss'}
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-white group-hover:text-brand-400 transition">{match.tournamentName}</h4>
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{timeAgo(match.timestamp?.toDate())}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-8 text-right">
+                                            <div>
+                                                <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Kills</p>
+                                                <p className="font-black text-white">{match.kills}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Prize</p>
+                                                <p className="font-black text-brand-400">NPR {match.prize.toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-12 text-center">
+                                    <Activity className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                                    <p className="text-gray-500 font-bold uppercase tracking-widest text-sm">No match history found</p>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
 
-                    {/* Teams */}
-                    <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
-                        <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 border-b border-gray-800 pb-2 flex items-center gap-2">
-                            <Users className="w-5 h-5 text-brand-500" /> Teams
-                        </h3>
-                        {teams.length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {teams.map(team => (
-                                    <Link to={`/team/${team.id}`} key={team.id} className="flex items-center gap-3 bg-dark p-3 rounded-xl border border-gray-800 hover:border-brand-500/50 transition group">
-                                        <div className="w-10 h-10 rounded-lg bg-gray-800 overflow-hidden flex items-center justify-center shrink-0">
-                                            {team.logoUrl ? (
-                                                <img src={team.logoUrl || undefined} alt={team.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <Users className="w-5 h-5 text-gray-600" />
-                                            )}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-black text-white text-sm group-hover:text-brand-400 transition line-clamp-1">{team.name}</h4>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-gray-500 text-sm">Not a member of any teams yet.</p>
-                        )}
-                    </div>
-
-                    {/* Announcements (Org Posts) */}
+                    {/* Announcements for Organizers */}
                     {profile.role === 'organizer' && (
-                        <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
-                            <div className="flex items-center justify-between mb-4 border-b border-gray-800 pb-2">
-                                <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-2">
+                        <div className="bg-card rounded-3xl border border-gray-800 overflow-hidden shadow-xl">
+                            <div className="p-6 border-b border-gray-800 flex items-center justify-between">
+                                <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
                                     <MessageSquare className="w-5 h-5 text-brand-500" /> Announcements
                                 </h3>
                                 {user?.uid === id && (
                                     <button 
                                         onClick={() => setShowCreatePost(true)}
-                                        className="bg-brand-500 hover:bg-brand-400 text-white px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition flex items-center gap-1"
+                                        className="bg-brand-500 hover:bg-brand-400 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition flex items-center gap-2"
                                     >
                                         <Plus className="w-4 h-4" /> Create Post
                                     </button>
                                 )}
                             </div>
-                            
-                            {orgPosts.length > 0 ? (
-                                <div className="space-y-4">
-                                    {orgPosts.map(post => (
-                                        <Link to={`/post/${post.id}`} key={post.id} className="block bg-dark p-5 rounded-xl border border-gray-700 shadow-lg hover:border-brand-500/50 transition group">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <h4 className="font-black text-white text-lg group-hover:text-brand-400 transition line-clamp-1">{post.title}</h4>
-                                                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1 shrink-0">
-                                                    <Calendar className="w-3 h-3" /> {formatDate(post.createdAt)}
-                                                </div>
-                                            </div>
-                                            <p className="text-gray-400 text-sm line-clamp-2 mb-4">
-                                                {post.content}
-                                            </p>
-                                            {post.imageUrl && (
-                                                <div className="w-full h-32 rounded-lg overflow-hidden mb-4">
-                                                    <img src={post.imageUrl || undefined} alt="Post Attachment" className="w-full h-full object-cover" />
-                                                </div>
-                                            )}
-                                            <div className="text-brand-500 text-xs font-bold uppercase tracking-widest flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                                                Read More <ArrowLeft className="w-3 h-3 rotate-180" />
-                                            </div>
-                                        </Link>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8 bg-dark rounded-xl border border-gray-800 border-dashed">
-                                    <MessageSquare className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                                    <p className="text-gray-500 text-sm">No announcements yet.</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Tournaments Hosted */}
-                    {profile.role === 'organizer' && (
-                        <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
-                            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 border-b border-gray-800 pb-2 flex items-center gap-2">
-                                <Calendar className="w-5 h-5 text-brand-500" /> Tournaments
-                            </h3>
-                            {tournaments.length > 0 ? (
-                                <div className="space-y-4">
-                                    {tournaments.map(t => (
-                                        <div key={t.id} className="bg-dark p-5 rounded-xl border border-gray-700 shadow-lg relative overflow-hidden group">
-                                            <div className="relative z-10">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <div>
-                                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                                            <span className="bg-gray-800 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-700">{t.game}</span>
-                                                            <span className="bg-brand-600/20 text-brand-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-brand-500/20 uppercase">{t.teamType}</span>
-                                                            <span className="bg-blue-600/20 text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-500/20 uppercase">{t.type}</span>
-                                                        </div>
-                                                        <h4 className="font-black text-white text-sm group-hover:text-brand-400 transition cursor-pointer" onClick={() => window.location.href = `/details/${t.id}`}>
-                                                            {t.title}
-                                                        </h4>
-                                                        <div className="text-xs text-gray-400 mt-1">{new Date(t.startTime.seconds * 1000).toLocaleDateString()}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-brand-400 font-bold text-sm">Rs. {t.prizePool}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="mt-4 flex gap-3 text-sm border-t border-gray-700 pt-3">
-                                                    <Link to={`/details/${t.id}`} className="text-gray-300 hover:text-white flex items-center gap-1">
-                                                        <Eye className="w-4 h-4" /> Details
-                                                    </Link>
-                                                    <button onClick={() => {
-                                                        navigator.clipboard.writeText(`${window.location.origin}/details/${t.id}`);
-                                                        showToast('Tournament link copied to clipboard', 'success');
-                                                    }} className="text-gray-300 hover:text-white flex items-center gap-1">
-                                                        <Share2 className="w-4 h-4" /> Share
-                                                    </button>
-                                                </div>
+                            <div className="p-6 space-y-6">
+                                {orgPosts.map(post => (
+                                    <div key={post.id} className="bg-dark p-6 rounded-2xl border border-gray-800 hover:border-gray-700 transition group">
+                                        <h4 className="text-xl font-black text-white mb-2 group-hover:text-brand-400 transition">{post.title}</h4>
+                                        <p className="text-gray-400 text-sm leading-relaxed mb-4">{post.content}</p>
+                                        {post.imageUrl && (
+                                            <img src={post.imageUrl} alt="Post" className="w-full h-48 object-cover rounded-xl mb-4" />
+                                        )}
+                                        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-gray-500">
+                                            <span>{formatDate(post.createdAt)}</span>
+                                            <div className="flex items-center gap-4">
+                                                <button className="hover:text-white transition flex items-center gap-1"><Eye className="w-3 h-3" /> 1.2k</button>
+                                                <button className="hover:text-white transition flex items-center gap-1"><MessageSquare className="w-3 h-3" /> 42</button>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-gray-500 text-sm">No tournaments hosted yet.</p>
-                            )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
 
-                <div className="space-y-6">
-                    {/* Stats */}
-                    <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
-                        <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 border-b border-gray-800 pb-2 flex items-center gap-2">
-                            <Trophy className="w-5 h-5 text-brand-500" /> Stats
+                <div className="space-y-8">
+                    {/* About Section */}
+                    <div className="bg-card p-6 rounded-3xl border border-gray-800 shadow-xl">
+                        <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Briefcase className="w-5 h-5 text-brand-500" /> About
                         </h3>
-                        <div className="grid grid-cols-1 gap-4">
-                            <div className="bg-dark p-3 rounded-xl border border-gray-800">
-                                <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Tournaments Joined</div>
-                                <div className="text-xl font-black text-white">{stats.tournamentsJoined}</div>
+                        <p className="text-gray-400 text-sm leading-relaxed mb-6">
+                            {profile.bio || 'This elite player prefers to let their gameplay do the talking.'}
+                        </p>
+                        {profile.skills && profile.skills.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {profile.skills.map((skill, i) => (
+                                    <span key={i} className="bg-dark border border-gray-800 text-brand-400 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                                        {skill}
+                                    </span>
+                                ))}
                             </div>
-                            <div className="bg-dark p-3 rounded-xl border border-gray-800">
-                                <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Total Winnings</div>
-                                <div className="text-xl font-black text-white">Rs. {stats.totalWinnings}</div>
-                            </div>
-                            <div className="bg-dark p-3 rounded-xl border border-gray-800">
-                                <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Win Rate</div>
-                                <div className="text-xl font-black text-white">{stats.winRate.toFixed(1)}%</div>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
-                    {/* Game Info */}
-                    <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-lg backdrop-blur-md bg-white/5">
-                        <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 border-b border-gray-800 pb-2">Game Info</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest block mb-1">In-Game ID</span>
-                                <div className="font-mono text-white bg-dark px-3 py-2 rounded-lg border border-gray-800 text-sm">
-                                    {profile.inGameId || 'Not provided'}
-                                </div>
-                            </div>
-                            {profile.inGameName && (
-                                <div>
-                                    <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest block mb-1">In-Game Name</span>
-                                    <div className="font-mono text-white bg-dark px-3 py-2 rounded-lg border border-gray-800 text-sm">
-                                        {profile.inGameName}
-                                    </div>
-                                </div>
+                    {/* Teams Section */}
+                    <div className="bg-card p-6 rounded-3xl border border-gray-800 shadow-xl">
+                        <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Users className="w-5 h-5 text-brand-500" /> Teams
+                        </h3>
+                        <div className="space-y-3">
+                            {teams.length > 0 ? (
+                                teams.map(team => (
+                                    <Link to={`/team/${team.id}`} key={team.id} className="flex items-center gap-3 bg-dark p-3 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition group">
+                                        <div className="w-12 h-12 rounded-xl bg-gray-800 overflow-hidden flex items-center justify-center shrink-0 border border-gray-700">
+                                            {team.logoUrl ? <img src={team.logoUrl} alt="Logo" className="w-full h-full object-cover" /> : <Users className="w-6 h-6 text-gray-600" />}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-black text-white text-sm group-hover:text-brand-400 transition">{team.name}</h4>
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{team.region || 'Global'}</p>
+                                        </div>
+                                    </Link>
+                                ))
+                            ) : (
+                                <p className="text-gray-500 text-sm italic">Not currently affiliated with a team.</p>
                             )}
                         </div>
                     </div>
@@ -509,7 +481,7 @@ const PublicProfile: React.FC = () => {
                             type="text"
                             value={postTitle}
                             onChange={(e) => setPostTitle(e.target.value)}
-                            className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-500 transition"
+                            className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-500 transition font-bold"
                             placeholder="Announcement Title"
                             required
                         />
@@ -519,7 +491,7 @@ const PublicProfile: React.FC = () => {
                         <textarea
                             value={postContent}
                             onChange={(e) => setPostContent(e.target.value)}
-                            className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-500 transition h-32 resize-none"
+                            className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-500 transition h-32 resize-none text-sm"
                             placeholder="Write your announcement here..."
                             required
                         />
@@ -530,22 +502,22 @@ const PublicProfile: React.FC = () => {
                             type="url"
                             value={postImageUrl}
                             onChange={(e) => setPostImageUrl(e.target.value)}
-                            className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-brand-500 transition"
+                            className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-500 transition font-mono text-sm"
                             placeholder="https://example.com/image.jpg"
                         />
                     </div>
-                    <div className="flex justify-end gap-3 mt-6">
+                    <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-800">
                         <button
                             type="button"
                             onClick={() => setShowCreatePost(false)}
-                            className="px-4 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition"
+                            className="px-6 py-3 rounded-xl font-bold text-gray-400 hover:text-white transition"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isCreatingPost || !postTitle.trim() || !postContent.trim()}
-                            className="bg-brand-500 hover:bg-brand-600 text-white px-6 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="bg-brand-600 hover:bg-brand-500 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest transition shadow-lg disabled:opacity-50"
                         >
                             {isCreatingPost ? 'Posting...' : 'Post Announcement'}
                         </button>

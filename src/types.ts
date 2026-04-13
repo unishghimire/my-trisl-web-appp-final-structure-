@@ -8,10 +8,20 @@ export interface UserProfile {
     isPowerOrganizer?: boolean; // Added
     balance: number;
     totalEarnings: number;
+    xp: number; // Added
+    level: number; // Added
     inGameId: string;
     inGameName?: string;
     teamName: string;
     teamId?: string;
+    isVerified?: boolean;
+    isChampion?: boolean;
+    rank?: string;
+    points?: number;
+    wins?: number;
+    tournamentsPlayed?: number;
+    winRate?: number;
+    rankChange?: number;
     phone: string;
     isBanned: boolean;
     createdAt: Timestamp | any;
@@ -108,13 +118,18 @@ export interface Match {
 export interface Team {
     id: string;
     name: string;
+    tag?: string;
     description?: string;
     logoUrl?: string;
     bannerUrl?: string;
     ownerId?: string;
     createdAt?: Timestamp | any;
     region?: string;
+    formationDate?: Timestamp | any;
     ranking?: number;
+    rankChange?: number;
+    points?: number;
+    totalEarnings?: number;
     players?: string[]; // Array of user IDs
     captainId?: string;
     stats?: {
@@ -198,8 +213,10 @@ export interface Slide {
     id: string;
     imageUrl: string;
     title: string;
+    description?: string;
     link: string;
     buttonText: string;
+    isActive: boolean;
     createdAt: Timestamp | any;
 }
 
@@ -229,6 +246,7 @@ export interface TeamMember {
     teamId: string;
     userId: string;
     role: 'admin' | 'moderator' | 'member';
+    roleInTeam?: 'Captain' | 'Fragger' | 'IGL' | 'Support' | 'Scout';
     joinedAt: Timestamp | any;
     user?: UserProfile; // Optional joined data
 }
@@ -251,6 +269,18 @@ export interface TeamActivity {
     action: string;
     details?: string;
     createdAt: Timestamp | any;
+}
+
+export interface MatchHistory {
+    id: string;
+    userId?: string;
+    teamId?: string;
+    tournamentId: string;
+    tournamentName: string;
+    result: 'victory' | 'defeat';
+    kills: number;
+    prize: number;
+    timestamp: Timestamp | any;
 }
 
 export interface Game {

@@ -242,6 +242,17 @@ export default function TournamentAdminPanel() {
             showToast('Failed to update score', 'error');
         }
     };
+    const getTeamName = (teamId: string) => {
+        if (teamId === 'TBD') return 'TBD';
+        // Try groups first
+        const groupTeam = tournament.groups?.flatMap(g => g.teams).find(t => t.id === teamId);
+        if (groupTeam) return groupTeam.name;
+        // Try participants
+        const participant = participants.find(p => p.teamId === teamId || p.userId === teamId);
+        if (participant) return participant.teamName || participant.username;
+        return teamId;
+    };
+
     const handleGenerateBracket = async () => {
         if (!tournament) return;
         
@@ -445,253 +456,277 @@ export default function TournamentAdminPanel() {
 
             {/* Content Area */}
             <div className="bg-dark rounded-2xl border border-gray-800 p-6">
-                {activeTab === 'overview' && (
-                    <div className="space-y-6">
-                        <h2 className="text-lg font-black uppercase tracking-widest text-white border-b border-gray-800 pb-4">Tournament Controls</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-surface p-4 rounded-xl border border-gray-800">
-                                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Status Control</h3>
-                                <div className="flex gap-2">
-                                    <button className="flex-1 bg-green-500/10 hover:bg-green-500/20 text-green-500 border border-green-500/20 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
-                                        <Play className="w-4 h-4" /> Start
-                                    </button>
-                                    <button className="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
-                                        <Pause className="w-4 h-4" /> Pause
+                <AnimatePresence mode="wait">
+                    {activeTab === 'overview' && (
+                        <motion.div 
+                            key="overview"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-6"
+                        >
+                            <h2 className="text-lg font-black uppercase tracking-widest text-white border-b border-gray-800 pb-4">Tournament Controls</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-surface p-4 rounded-xl border border-gray-800">
+                                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Status Control</h3>
+                                    <div className="flex gap-2">
+                                        <button className="flex-1 bg-green-500/10 hover:bg-green-500/20 text-green-500 border border-green-500/20 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
+                                            <Play className="w-4 h-4" /> Start
+                                        </button>
+                                        <button className="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
+                                            <Pause className="w-4 h-4" /> Pause
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="bg-surface p-4 rounded-xl border border-gray-800">
+                                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Stage Progression</h3>
+                                    <select className="w-full bg-dark border border-gray-800 rounded-lg p-2.5 text-sm text-white focus:border-brand-500 outline-none">
+                                        <option value="registration">Registration</option>
+                                        <option value="group_stage">Group Stage</option>
+                                        <option value="knockout">Knockout Stage</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </div>
+                                <div className="bg-surface p-4 rounded-xl border border-gray-800">
+                                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Quick Actions</h3>
+                                    <button className="w-full bg-brand-600/10 hover:bg-brand-600/20 text-brand-500 border border-brand-500/20 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all">
+                                        Generate Matches
                                     </button>
                                 </div>
                             </div>
-                            <div className="bg-surface p-4 rounded-xl border border-gray-800">
-                                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Stage Progression</h3>
-                                <select className="w-full bg-dark border border-gray-800 rounded-lg p-2.5 text-sm text-white focus:border-brand-500 outline-none">
-                                    <option value="registration">Registration</option>
-                                    <option value="group_stage">Group Stage</option>
-                                    <option value="knockout">Knockout Stage</option>
-                                    <option value="completed">Completed</option>
-                                </select>
-                            </div>
-                            <div className="bg-surface p-4 rounded-xl border border-gray-800">
-                                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Quick Actions</h3>
-                                <button className="w-full bg-brand-600/10 hover:bg-brand-600/20 text-brand-500 border border-brand-500/20 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all">
-                                    Generate Matches
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'groups' && (
+                        <motion.div 
+                            key="groups"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-6"
+                        >
+                            <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+                                <h2 className="text-lg font-black uppercase tracking-widest text-white">Groups Management</h2>
+                                <button 
+                                    onClick={() => setIsCreateGroupModalOpen(true)}
+                                    className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all"
+                                >
+                                    <Plus className="w-4 h-4" /> Create Group
                                 </button>
                             </div>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'groups' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-                            <h2 className="text-lg font-black uppercase tracking-widest text-white">Groups Management</h2>
-                            <button 
-                                onClick={() => setIsCreateGroupModalOpen(true)}
-                                className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all"
-                            >
-                                <Plus className="w-4 h-4" /> Create Group
-                            </button>
-                        </div>
-                        
-                        {tournament.groups && tournament.groups.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {tournament.groups.map(group => (
-                                    <div key={group.id} className="bg-surface border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition-all">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="text-lg font-black text-white">{group.name}</h3>
-                                                <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                                                    <Users className="w-3 h-3" /> {group.teams.length} / {group.teamLimit} Teams
-                                                </div>
-                                            </div>
-                                            <button 
-                                                onClick={() => handleDeleteGroup(group.id)}
-                                                className="text-gray-500 hover:text-red-500 transition-colors"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center justify-between text-xs bg-dark p-2 rounded-lg border border-gray-800">
-                                                <span className="text-gray-400 flex items-center gap-1"><Lock className="w-3 h-3" /> Access</span>
-                                                <span className={group.isPublic ? 'text-green-500' : 'text-yellow-500'}>
-                                                    {group.isPublic ? 'Public' : 'Private'}
-                                                </span>
-                                            </div>
-                                            {group.passCode && (
-                                                <div className="flex items-center justify-between text-xs bg-dark p-2 rounded-lg border border-gray-800">
-                                                    <span className="text-gray-400 flex items-center gap-1"><QrCode className="w-3 h-3" /> Passcode</span>
-                                                    <span className="text-white font-mono">{group.passCode}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="mt-4 pt-4 border-t border-gray-800 flex gap-2">
-                                            <button 
-                                                onClick={() => {
-                                                    setSelectedGroup(group);
-                                                    setIsManageTeamsModalOpen(true);
-                                                }}
-                                                className="flex-1 bg-brand-600/10 hover:bg-brand-600/20 text-brand-500 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                                            >
-                                                Manage Teams
-                                            </button>
-                                            <button 
-                                                onClick={() => handleGenerateGroupMatches(group.id)}
-                                                disabled={group.teams.length < 2 || group.matches.length > 0}
-                                                className="flex-1 bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                                            >
-                                                {group.matches.length > 0 ? 'Matches Generated' : 'Generate Matches'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-12">
-                                <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                                <p className="text-gray-400 font-medium">No groups created yet.</p>
-                                <p className="text-sm text-gray-500 mt-2">Create groups to organize teams for the group stage.</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {activeTab === 'matches' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-                            <h2 className="text-lg font-black uppercase tracking-widest text-white">Match Schedule</h2>
-                        </div>
-                        
-                        {tournament.groups && tournament.groups.some(g => g.matches.length > 0) ? (
-                            <div className="space-y-8">
-                                {tournament.groups.map(group => group.matches.length > 0 && (
-                                    <div key={group.id} className="space-y-4">
-                                        <h3 className="text-md font-black text-brand-500 uppercase tracking-widest">{group.name} Matches</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                            {group.matches.map(match => {
-                                                const team1 = group.teams.find(t => t.id === match.team1Id);
-                                                const team2 = group.teams.find(t => t.id === match.team2Id);
-                                                return (
-                                                    <div key={match.id} className="bg-surface border border-gray-800 rounded-xl p-4">
-                                                        <div className="flex justify-between items-center mb-4">
-                                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Round {match.round}</span>
-                                                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${
-                                                                match.status === 'completed' ? 'bg-green-500/10 text-green-500' :
-                                                                match.status === 'live' ? 'bg-red-500/10 text-red-500' :
-                                                                'bg-gray-800 text-gray-400'
-                                                            }`}>
-                                                                {match.status}
-                                                            </span>
-                                                        </div>
-                                                        <div className="space-y-3">
-                                                            <div className="flex justify-between items-center">
-                                                                <span className="text-sm font-bold text-white">{team1?.name || 'TBD'}</span>
-                                                                <span className="text-lg font-black text-brand-500">{match.score1}</span>
-                                                            </div>
-                                                            <div className="flex justify-between items-center">
-                                                                <span className="text-sm font-bold text-white">{team2?.name || 'TBD'}</span>
-                                                                <span className="text-lg font-black text-brand-500">{match.score2}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="mt-4 pt-4 border-t border-gray-800">
-                                                            <button 
-                                                                onClick={() => {
-                                                                    setSelectedMatch({ groupId: group.id, match });
-                                                                    setMatchScore({ score1: match.score1, score2: match.score2, status: match.status });
-                                                                    setIsUpdateScoreModalOpen(true);
-                                                                }}
-                                                                className="w-full bg-dark hover:bg-gray-800 text-gray-400 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                                                            >
-                                                                Update Score
-                                                            </button>
-                                                        </div>
+                            
+                            {tournament.groups && tournament.groups.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {tournament.groups.map(group => (
+                                        <div key={group.id} className="bg-surface border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition-all">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div>
+                                                    <h3 className="text-lg font-black text-white">{group.name}</h3>
+                                                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                                                        <Users className="w-3 h-3" /> {group.teams.length} / {group.teamLimit} Teams
                                                     </div>
-                                                );
-                                            })}
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleDeleteGroup(group.id)}
+                                                    className="text-gray-500 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between text-xs bg-dark p-2 rounded-lg border border-gray-800">
+                                                    <span className="text-gray-400 flex items-center gap-1"><Lock className="w-3 h-3" /> Access</span>
+                                                    <span className={group.isPublic ? 'text-green-500' : 'text-yellow-500'}>
+                                                        {group.isPublic ? 'Public' : 'Private'}
+                                                    </span>
+                                                </div>
+                                                {group.passCode && (
+                                                    <div className="flex items-center justify-between text-xs bg-dark p-2 rounded-lg border border-gray-800">
+                                                        <span className="text-gray-400 flex items-center gap-1"><QrCode className="w-3 h-3" /> Passcode</span>
+                                                        <span className="text-white font-mono">{group.passCode}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="mt-4 pt-4 border-t border-gray-800 flex gap-2">
+                                                <button 
+                                                    onClick={() => {
+                                                        setSelectedGroup(group);
+                                                        setIsManageTeamsModalOpen(true);
+                                                    }}
+                                                    className="flex-1 bg-brand-600/10 hover:bg-brand-600/20 text-brand-500 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                                >
+                                                    Manage Teams
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleGenerateGroupMatches(group.id)}
+                                                    disabled={group.teams.length < 2 || group.matches.length > 0}
+                                                    className="flex-1 bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                                >
+                                                    {group.matches.length > 0 ? 'Matches Generated' : 'Generate Matches'}
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-12">
-                                <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                                <p className="text-gray-400 font-medium">No matches scheduled.</p>
-                                <p className="text-sm text-gray-500 mt-2">Generate matches from the Groups tab.</p>
-                            </div>
-                        )}
-                    </div>
-                )}
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12">
+                                    <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                                    <p className="text-gray-400 font-medium">No groups created yet.</p>
+                                    <p className="text-sm text-gray-500 mt-2">Create groups to organize teams for the group stage.</p>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
 
-                {activeTab === 'brackets' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-                            <h2 className="text-lg font-black uppercase tracking-widest text-white">Knockout Brackets</h2>
-                            <button 
-                                onClick={handleGenerateBracket}
-                                disabled={tournament.bracketMatches && tournament.bracketMatches.length > 0}
-                                className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Generate Bracket
-                            </button>
-                        </div>
-                        
-                        {tournament.bracketMatches && tournament.bracketMatches.length > 0 ? (
-                            <div className="overflow-x-auto pb-8 custom-scrollbar">
-                                <div className="flex gap-12 min-w-max">
-                                    {/* Group matches by round */}
-                                    {Array.from(new Set(tournament.bracketMatches.map(m => m.round))).sort().map(round => {
-                                        const roundMatches = tournament.bracketMatches!.filter(m => m.round === round);
-                                        return (
-                                            <div key={round} className="flex flex-col gap-8 justify-center min-w-[250px]">
-                                                <h3 className="text-center text-sm font-black text-gray-500 uppercase tracking-widest mb-4">
-                                                    {round === Math.max(...tournament.bracketMatches!.map(m => m.round)) ? 'Finals' : 
-                                                     round === Math.max(...tournament.bracketMatches!.map(m => m.round)) - 1 ? 'Semi-Finals' : 
-                                                     `Round ${round}`}
-                                                </h3>
-                                                {roundMatches.map(match => {
-                                                    // Find team names (they might be in groups or we might need to fetch them)
-                                                    // For now, just use IDs or 'TBD'
-                                                    const team1Name = match.team1Id === 'TBD' ? 'TBD' : tournament.groups?.flatMap(g => g.teams).find(t => t.id === match.team1Id)?.name || match.team1Id;
-                                                    const team2Name = match.team2Id === 'TBD' ? 'TBD' : tournament.groups?.flatMap(g => g.teams).find(t => t.id === match.team2Id)?.name || match.team2Id;
-
+                    {activeTab === 'matches' && (
+                        <motion.div 
+                            key="matches"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-6"
+                        >
+                            <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+                                <h2 className="text-lg font-black uppercase tracking-widest text-white">Match Schedule</h2>
+                            </div>
+                            
+                            {tournament.groups && tournament.groups.some(g => g.matches.length > 0) ? (
+                                <div className="space-y-8">
+                                    {tournament.groups.map(group => group.matches.length > 0 && (
+                                        <div key={group.id} className="space-y-4">
+                                            <h3 className="text-md font-black text-brand-500 uppercase tracking-widest">{group.name} Matches</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {group.matches.map(match => {
+                                                    const team1 = group.teams.find(t => t.id === match.team1Id);
+                                                    const team2 = group.teams.find(t => t.id === match.team2Id);
                                                     return (
-                                                        <div key={match.id} className="bg-surface border border-gray-800 rounded-xl p-4 relative">
-                                                            {/* Connector lines could be added here using pseudo-elements or SVGs */}
-                                                            <div className="space-y-2">
-                                                                <div className="flex justify-between items-center bg-dark p-2 rounded-lg border border-gray-800">
-                                                                    <span className="text-sm font-bold text-white truncate max-w-[150px]">{team1Name}</span>
+                                                        <div key={match.id} className="bg-surface border border-gray-800 rounded-xl p-4">
+                                                            <div className="flex justify-between items-center mb-4">
+                                                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Round {match.round}</span>
+                                                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${
+                                                                    match.status === 'completed' ? 'bg-green-500/10 text-green-500' :
+                                                                    match.status === 'live' ? 'bg-red-500/10 text-red-500' :
+                                                                    'bg-gray-800 text-gray-400'
+                                                                }`}>
+                                                                    {match.status}
+                                                                </span>
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-sm font-bold text-white">{team1?.name || 'TBD'}</span>
                                                                     <span className="text-lg font-black text-brand-500">{match.score1}</span>
                                                                 </div>
-                                                                <div className="flex justify-between items-center bg-dark p-2 rounded-lg border border-gray-800">
-                                                                    <span className="text-sm font-bold text-white truncate max-w-[150px]">{team2Name}</span>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-sm font-bold text-white">{team2?.name || 'TBD'}</span>
                                                                     <span className="text-lg font-black text-brand-500">{match.score2}</span>
                                                                 </div>
                                                             </div>
-                                                            <button 
-                                                                onClick={() => {
-                                                                    setSelectedMatch({ groupId: 'bracket', match });
-                                                                    setMatchScore({ score1: match.score1, score2: match.score2, status: match.status });
-                                                                    setIsUpdateScoreModalOpen(true);
-                                                                }}
-                                                                className="w-full mt-3 bg-dark hover:bg-gray-800 text-gray-400 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-gray-800"
-                                                            >
-                                                                Update
-                                                            </button>
+                                                            <div className="mt-4 pt-4 border-t border-gray-800">
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        setSelectedMatch({ groupId: group.id, match });
+                                                                        setMatchScore({ score1: match.score1, score2: match.score2, status: match.status });
+                                                                        setIsUpdateScoreModalOpen(true);
+                                                                    }}
+                                                                    className="w-full bg-dark hover:bg-gray-800 text-gray-400 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                                                >
+                                                                    Update Score
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     );
                                                 })}
                                             </div>
-                                        );
-                                    })}
+                                        </div>
+                                    ))}
                                 </div>
+                            ) : (
+                                <div className="text-center py-12">
+                                    <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                                    <p className="text-gray-400 font-medium">No matches scheduled.</p>
+                                    <p className="text-sm text-gray-500 mt-2">Generate matches from the Groups tab.</p>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'brackets' && (
+                        <motion.div 
+                            key="brackets"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-6"
+                        >
+                            <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+                                <h2 className="text-lg font-black uppercase tracking-widest text-white">Knockout Brackets</h2>
+                                <button 
+                                    onClick={handleGenerateBracket}
+                                    disabled={tournament.bracketMatches && tournament.bracketMatches.length > 0}
+                                    className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Generate Bracket
+                                </button>
                             </div>
-                        ) : (
-                            <div className="text-center py-12">
-                                <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                                <p className="text-gray-400 font-medium">Bracket not generated.</p>
-                                <p className="text-sm text-gray-500 mt-2">Advance teams from the group stage to generate the knockout bracket.</p>
-                            </div>
-                        )}
-                    </div>
-                )}
+                            
+                            {tournament.bracketMatches && tournament.bracketMatches.length > 0 ? (
+                                <div className="overflow-x-auto pb-8 custom-scrollbar">
+                                    <div className="flex gap-12 min-w-max">
+                                        {/* Group matches by round */}
+                                        {Array.from(new Set(tournament.bracketMatches.map(m => m.round))).sort().map(round => {
+                                            const roundMatches = tournament.bracketMatches!.filter(m => m.round === round);
+                                            return (
+                                                <div key={round} className="flex flex-col gap-8 justify-center min-w-[250px]">
+                                                    <h3 className="text-center text-sm font-black text-gray-500 uppercase tracking-widest mb-4">
+                                                        {round === Math.max(...tournament.bracketMatches!.map(m => m.round)) ? 'Finals' : 
+                                                         round === Math.max(...tournament.bracketMatches!.map(m => m.round)) - 1 ? 'Semi-Finals' : 
+                                                         `Round ${round}`}
+                                                    </h3>
+                                                    {roundMatches.map(match => {
+                                                        const team1Name = getTeamName(match.team1Id || 'TBD');
+                                                        const team2Name = getTeamName(match.team2Id || 'TBD');
+
+                                                        return (
+                                                            <div key={match.id} className="bg-surface border border-gray-800 rounded-xl p-4 relative">
+                                                                {/* Connector lines could be added here using pseudo-elements or SVGs */}
+                                                                <div className="space-y-2">
+                                                                    <div className="flex justify-between items-center bg-dark p-2 rounded-lg border border-gray-800">
+                                                                        <span className="text-sm font-bold text-white truncate max-w-[150px]">{team1Name}</span>
+                                                                        <span className="text-lg font-black text-brand-500">{match.score1}</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between items-center bg-dark p-2 rounded-lg border border-gray-800">
+                                                                        <span className="text-sm font-bold text-white truncate max-w-[150px]">{team2Name}</span>
+                                                                        <span className="text-lg font-black text-brand-500">{match.score2}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        setSelectedMatch({ groupId: 'bracket', match });
+                                                                        setMatchScore({ score1: match.score1, score2: match.score2, status: match.status });
+                                                                        setIsUpdateScoreModalOpen(true);
+                                                                    }}
+                                                                    className="w-full mt-3 bg-dark hover:bg-gray-800 text-gray-400 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-gray-800"
+                                                                >
+                                                                    Update
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-12">
+                                    <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                                    <p className="text-gray-400 font-medium">Bracket not generated.</p>
+                                    <p className="text-sm text-gray-500 mt-2">Advance teams from the group stage to generate the knockout bracket.</p>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Create Group Modal */}
@@ -860,9 +895,7 @@ export default function TournamentAdminPanel() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-dark p-4 rounded-xl border border-gray-800 text-center">
                                 <p className="text-xs font-bold text-gray-500 uppercase mb-2">
-                                    {selectedMatch.groupId === 'bracket' 
-                                        ? (selectedMatch.match.team1Id === 'TBD' ? 'TBD' : tournament.groups?.flatMap(g => g.teams).find(t => t.id === selectedMatch.match.team1Id)?.name || selectedMatch.match.team1Id)
-                                        : (tournament.groups?.find(g => g.id === selectedMatch.groupId)?.teams.find(t => t.id === selectedMatch.match.team1Id)?.name || 'Team 1')}
+                                    {getTeamName(selectedMatch.match.team1Id || 'TBD')}
                                 </p>
                                 <input 
                                     type="number" 
@@ -873,9 +906,7 @@ export default function TournamentAdminPanel() {
                             </div>
                             <div className="bg-dark p-4 rounded-xl border border-gray-800 text-center">
                                 <p className="text-xs font-bold text-gray-500 uppercase mb-2">
-                                    {selectedMatch.groupId === 'bracket' 
-                                        ? (selectedMatch.match.team2Id === 'TBD' ? 'TBD' : tournament.groups?.flatMap(g => g.teams).find(t => t.id === selectedMatch.match.team2Id)?.name || selectedMatch.match.team2Id)
-                                        : (tournament.groups?.find(g => g.id === selectedMatch.groupId)?.teams.find(t => t.id === selectedMatch.match.team2Id)?.name || 'Team 2')}
+                                    {getTeamName(selectedMatch.match.team2Id || 'TBD')}
                                 </p>
                                 <input 
                                     type="number" 
