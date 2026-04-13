@@ -4,7 +4,7 @@ import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { PaymentMethod, SiteSettings, Transaction } from '../types';
+import { PaymentMethod, PaymentCategory, SiteSettings, Transaction } from '../types';
 import { formatCurrency } from '../utils';
 
 interface WalletModalProps {
@@ -17,11 +17,13 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
   const { user, profile } = useAuth();
   const { showToast } = useNotification();
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw'>(initialTab);
+  const [paymentCategories, setPaymentCategories] = useState<PaymentCategory[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Deposit State
+  const [selectedCategory, setSelectedCategory] = useState<PaymentCategory | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   const [senderNumber, setSenderNumber] = useState('');
@@ -43,6 +45,12 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
   const fetchData = async () => {
     setLoading(true);
     try {
+      const catSnap = await getDocs(query(
+        collection(db, 'paymentCategories'),
+        where('isActive', '==', true)
+      ));
+      setPaymentCategories(catSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentCategory)));
+
       const paySnap = await getDocs(query(
         collection(db, 'paymentMethods'),
         where('isActive', '==', true)
@@ -146,25 +154,10 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
       <div className="relative w-full sm:max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl border border-gray-800 shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in max-h-[90vh] flex flex-col">
         <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-gradient-to-r from-gray-900 to-black shrink-0">
           <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-brand-500" /> Wallet Operations
+            <CreditCard className="w-5 h-5 text-brand-500" /> {activeTab === 'deposit' ? 'Deposit Funds' : 'Withdraw Funds'}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition text-gray-400 hover:text-white">
             <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        <div className="flex border-b border-gray-800 shrink-0">
-          <button 
-            onClick={() => setActiveTab('deposit')}
-            className={`flex-1 py-4 font-black text-xs uppercase tracking-widest transition ${activeTab === 'deposit' ? 'text-brand-400 bg-brand-500/5 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}
-          >
-            Deposit
-          </button>
-          <button 
-            onClick={() => setActiveTab('withdraw')}
-            className={`flex-1 py-4 font-black text-xs uppercase tracking-widest transition ${activeTab === 'withdraw' ? 'text-brand-400 bg-brand-500/5 border-b-2 border-brand-500' : 'text-gray-500 hover:text-white'}`}
-          >
-            Withdraw
           </button>
         </div>
 
@@ -176,26 +169,52 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
             </div>
           ) : activeTab === 'deposit' ? (
             <div className="space-y-6">
-              {!selectedMethod ? (
+              {!selectedCategory ? (
                 <div className="grid grid-cols-1 gap-3">
-                  {paymentMethods.map(pm => (
+                  <h3 className="text-xs text-gray-400 uppercase font-bold mb-2">Select Payment Category</h3>
+                  {paymentCategories.map(cat => (
                     <button 
-                      key={pm.id} 
-                      onClick={() => setSelectedMethod(pm)}
+                      key={cat.id} 
+                      onClick={() => setSelectedCategory(cat)}
                       className="flex items-center justify-between p-4 bg-card rounded-xl border border-gray-800 hover:border-brand-500 transition group"
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-dark rounded-lg flex items-center justify-center border border-gray-700">
-                          <img src={pm.qrUrl || undefined} className="w-8 h-8 object-contain" alt={pm.name} />
-                        </div>
-                        <div className="text-left">
-                          <div className="font-bold text-white group-hover:text-brand-400 transition">{pm.name}</div>
-                          <div className="text-[10px] text-gray-500 uppercase font-black">{pm.type}</div>
-                        </div>
+                      <div className="text-left">
+                        <div className="font-bold text-white group-hover:text-brand-400 transition">{cat.name}</div>
+                        <div className="text-[10px] text-gray-500 uppercase font-black mt-1">{cat.description}</div>
                       </div>
-                      <ArrowDown className="w-4 h-4 text-gray-600 group-hover:text-brand-500 transition" />
+                      <ArrowDown className="w-4 h-4 text-gray-600 group-hover:text-brand-500 transition -rotate-90" />
                     </button>
                   ))}
+                </div>
+              ) : !selectedMethod ? (
+                <div className="space-y-6 animate-fade-in">
+                  <button onClick={() => setSelectedCategory(null)} className="text-brand-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1 hover:underline">
+                    <X className="w-3 h-3" /> Back to Categories
+                  </button>
+                  <h3 className="text-xs text-gray-400 uppercase font-bold mb-2">Select {selectedCategory.name} Method</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    {paymentMethods.filter(pm => pm.categoryId === selectedCategory.id).map(pm => (
+                      <button 
+                        key={pm.id} 
+                        onClick={() => setSelectedMethod(pm)}
+                        className="flex items-center justify-between p-4 bg-card rounded-xl border border-gray-800 hover:border-brand-500 transition group"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-dark rounded-lg flex items-center justify-center border border-gray-700">
+                            <img src={pm.qrUrl || undefined} className="w-8 h-8 object-contain" alt={pm.name} />
+                          </div>
+                          <div className="text-left">
+                            <div className="font-bold text-white group-hover:text-brand-400 transition">{pm.name}</div>
+                            <div className="text-[10px] text-gray-500 uppercase font-black">{pm.type}</div>
+                          </div>
+                        </div>
+                        <ArrowDown className="w-4 h-4 text-gray-600 group-hover:text-brand-500 transition" />
+                      </button>
+                    ))}
+                    {paymentMethods.filter(pm => pm.categoryId === selectedCategory.id).length === 0 && (
+                        <div className="text-center py-8 text-gray-500 text-sm">No payment methods available in this category.</div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-6 animate-fade-in">
@@ -264,9 +283,9 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
                   className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none font-bold"
                 >
                   <option value="">Select Method</option>
-                  <option value="eSewa">eSewa</option>
-                  <option value="Khalti">Khalti</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
+                  {paymentMethods.map(pm => (
+                    <option key={pm.id} value={pm.name}>{pm.name}</option>
+                  ))}
                 </select>
                 <textarea 
                   placeholder="Account Details (ID, Name, etc.)"

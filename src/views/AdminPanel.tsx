@@ -4,14 +4,14 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { Transaction, UserProfile, Slide, PromoCode, Game, PaymentMethod, SiteSettings, OrgApplication, Tournament } from '../types';
+import { Transaction, UserProfile, Slide, PromoCode, Game, PaymentMethod, PaymentCategory, SiteSettings, OrgApplication, Tournament, TournamentEarning, ActivityLog, BroadcastNotification } from '../types';
 import { formatCurrency, formatDate } from '../utils';
 import { NotificationService } from '../services/NotificationService';
 import ConfirmModal from '../components/ConfirmModal';
 import TournamentCreateModal from '../components/TournamentCreateModal';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
 import { DEFAULT_BANNER, NEXPLAY_LOGO } from '../constants';
-import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info, ExternalLink, CheckCircle } from 'lucide-react';
+import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info, ExternalLink, CheckCircle, DollarSign } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
     const { profile } = useAuth();
@@ -28,6 +28,7 @@ const AdminPanel: React.FC = () => {
     const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [games, setGames] = useState<Game[]>([]);
+    const [paymentCategories, setPaymentCategories] = useState<PaymentCategory[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [stats, setStats] = useState({ totalBalance: 0, todayDep: 0, todayWith: 0 });
@@ -42,13 +43,21 @@ const AdminPanel: React.FC = () => {
     const [isPublished, setIsPublished] = useState(true);
     const [uploading, setUploading] = useState(false);
 
+    // Payment Category Form State
+    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+    const [editingCategory, setEditingCategory] = useState<PaymentCategory | null>(null);
+    const [categoryName, setCategoryName] = useState('');
+    const [categoryDescription, setCategoryDescription] = useState('');
+    const [categoryActive, setCategoryActive] = useState(true);
+
     // Payment Method Form State
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [editingPayment, setEditingPayment] = useState<PaymentMethod | null>(null);
+    const [paymentCategoryId, setPaymentCategoryId] = useState('');
     const [paymentName, setPaymentName] = useState('');
     const [paymentQr, setPaymentQr] = useState('');
     const [paymentInstructions, setPaymentInstructions] = useState('');
-    const [paymentType, setPaymentType] = useState<'eSewa' | 'Khalti' | 'Bank' | 'Other'>('eSewa');
+    const [paymentType, setPaymentType] = useState('eSewa');
     const [paymentActive, setPaymentActive] = useState(true);
     const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
 
@@ -77,6 +86,20 @@ const AdminPanel: React.FC = () => {
     const [notice, setNotice] = useState('');
     const [isNoticeActive, setIsNoticeActive] = useState(false);
     const [orgFormDescription, setOrgFormDescription] = useState('');
+    const [broadcastMessage, setBroadcastMessage] = useState('');
+
+    // New UX State
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [activityLogs, setActivityLogs] = useState<any[]>([]);
+    const [txDateFrom, setTxDateFrom] = useState('');
+    const [txDateTo, setTxDateTo] = useState('');
+    const [banReason, setBanReason] = useState('');
+    const [rejectReason, setRejectReason] = useState('');
+    const [userAuditLogs, setUserAuditLogs] = useState<Transaction[]>([]);
+    const [isUserAuditDrawerOpen, setIsUserAuditDrawerOpen] = useState(false);
+    const [isNotifyUserModalOpen, setIsNotifyUserModalOpen] = useState(false);
+    const [notifyUserMessage, setNotifyUserMessage] = useState('');
+    const [notifyUserTitle, setNotifyUserTitle] = useState('');
 
     const { handlePaste: handlePasteSlide, handleDrop: handleDropSlide, handleDragOver: handleDragOverSlide } = useInvisibleImage({
         onUploadStart: () => setUploading(true),
@@ -122,6 +145,7 @@ const AdminPanel: React.FC = () => {
     const [txFilterType, setTxFilterType] = useState<'all' | 'deposit' | 'withdrawal' | 'prize' | 'refund' | 'entry_fee'>('all');
     const [txFilterTournament, setTxFilterTournament] = useState<string>('all');
     const [txSearchUser, setTxSearchUser] = useState('');
+    const [tournamentEarnings, setTournamentEarnings] = useState<TournamentEarning[]>([]);
 
     // Confirm Modal State
     const [confirmModal, setConfirmModal] = useState<{
@@ -138,6 +162,33 @@ const AdminPanel: React.FC = () => {
     });
 
     const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    const getRelativeTime = (timestamp: any) => {
+        if (!timestamp) return '';
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        const now = new Date();
+        const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+        
+        if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+        return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    };
+
+    const logAdminAction = async (action: string, details: string) => {
+        if (!profile) return;
+        try {
+            await setDoc(doc(collection(db, 'activityLogs')), {
+                adminId: profile.uid,
+                adminEmail: profile.email,
+                action,
+                details,
+                timestamp: serverTimestamp()
+            });
+        } catch (error) {
+            console.error("Failed to log admin action:", error);
+        }
+    };
 
     useEffect(() => {
         if (profile?.role !== 'admin') return;
@@ -169,6 +220,10 @@ const AdminPanel: React.FC = () => {
                 const gameSnap = await getDocs(query(collection(db, 'games'), orderBy('createdAt', 'desc')));
                 setGames(gameSnap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
 
+                // Fetch payment categories
+                const payCatSnap = await getDocs(query(collection(db, 'paymentCategories'), orderBy('createdAt', 'desc')));
+                setPaymentCategories(payCatSnap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentCategory)));
+
                 // Fetch payment methods
                 const paySnap = await getDocs(query(collection(db, 'paymentMethods'), orderBy('createdAt', 'desc')));
                 setPaymentMethods(paySnap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentMethod)));
@@ -188,6 +243,24 @@ const AdminPanel: React.FC = () => {
                 
                 let totalBal = 0;
                 usersSnap.forEach(d => totalBal += (d.data().balance || 0));
+
+                // Fetch activity logs
+                const logsSnap = await getDocs(query(collection(db, 'activityLogs'), orderBy('timestamp', 'desc'), limit(10)));
+                setActivityLogs(logsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+                // Fetch tournament earnings
+                const earningsSnap = await getDocs(query(collection(db, 'tournamentEarnings'), orderBy('createdAt', 'desc')));
+                setTournamentEarnings(earningsSnap.docs.map(d => ({ id: d.id, ...d.data() } as TournamentEarning)));
+
+                // Load filters from local storage
+                const savedTxStatus = localStorage.getItem('txFilterStatus');
+                const savedTxType = localStorage.getItem('txFilterType');
+                const savedTxFrom = localStorage.getItem('txDateFrom');
+                const savedTxTo = localStorage.getItem('txDateTo');
+                if (savedTxStatus) setTxFilterStatus(savedTxStatus as any);
+                if (savedTxType) setTxFilterType(savedTxType as any);
+                if (savedTxFrom) setTxDateFrom(savedTxFrom);
+                if (savedTxTo) setTxDateTo(savedTxTo);
 
                 // Fetch site settings
                 const settingsSnap = await getDoc(doc(db, 'settings', 'site'));
@@ -570,12 +643,68 @@ const AdminPanel: React.FC = () => {
         }
     };
 
+    const handleSaveCategory = async () => {
+        if (!categoryName) return showToast('Please provide a category name', 'warning');
+        
+        try {
+            const catData = {
+                name: categoryName,
+                description: categoryDescription,
+                isActive: categoryActive,
+                createdAt: editingCategory ? editingCategory.createdAt : serverTimestamp()
+            };
+
+            if (editingCategory) {
+                await updateDoc(doc(db, 'paymentCategories', editingCategory.id), catData);
+                setPaymentCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, ...catData } : c));
+                showToast('Payment Category Updated', 'success');
+            } else {
+                const newRef = doc(collection(db, 'paymentCategories'));
+                await setDoc(newRef, catData);
+                setPaymentCategories(prev => [{ id: newRef.id, ...catData }, ...prev]);
+                showToast('Payment Category Added', 'success');
+            }
+            
+            setIsCategoryModalOpen(false);
+            setEditingCategory(null);
+            setCategoryName('');
+            setCategoryDescription('');
+            setCategoryActive(true);
+        } catch (error) {
+            console.error("Error saving payment category:", error);
+            showToast('Failed to save payment category', 'error');
+        }
+    };
+
+    const handleDeleteCategory = async (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Category',
+            message: 'Are you sure you want to delete this category?',
+            isDestructive: true,
+            onConfirm: async () => {
+                try {
+                    await deleteDoc(doc(db, 'paymentCategories', id));
+                    setPaymentCategories(prev => prev.filter(c => c.id !== id));
+                    showToast('Category Deleted', 'success');
+                    logAdminAction('Deleted Payment Category', `Category ID: ${id}`);
+                } catch (error) {
+                    console.error("Error deleting category:", error);
+                    showToast('Failed to delete category', 'error');
+                } finally {
+                    closeConfirmModal();
+                }
+            }
+        });
+    };
+
     const handleSavePayment = async () => {
-        if (!paymentName || !paymentQr || !paymentInstructions) return showToast('Please fill all fields', 'warning');
+        if (!paymentName || !paymentQr || !paymentInstructions || !paymentCategoryId) return showToast('Please fill all fields', 'warning');
         
         try {
             const payData = {
                 name: paymentName,
+                categoryId: paymentCategoryId,
                 qrUrl: paymentQr,
                 instructions: paymentInstructions,
                 type: paymentType,
@@ -597,6 +726,7 @@ const AdminPanel: React.FC = () => {
             setIsPaymentModalOpen(false);
             setEditingPayment(null);
             setPaymentName('');
+            setPaymentCategoryId('');
             setPaymentQr('');
             setPaymentInstructions('');
         } catch (error) {
@@ -951,17 +1081,97 @@ const AdminPanel: React.FC = () => {
         setIsGameModalOpen(true);
     };
 
+    const handleReleaseEarnings = async (earning: TournamentEarning) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Release Earnings',
+            message: `Are you sure you want to release ${formatCurrency(earning.orgShare)} to ${earning.orgName}'s wallet?`,
+            isDestructive: false,
+            onConfirm: async () => {
+                try {
+                    setLoading(true);
+                    const batch = writeBatch(db);
+                    
+                    // Update earning status
+                    const earningRef = doc(db, 'tournamentEarnings', earning.id);
+                    batch.update(earningRef, {
+                        status: 'released',
+                        releasedAt: serverTimestamp()
+                    });
+                    
+                    // Update org wallet
+                    const orgRef = doc(db, 'users', earning.orgId);
+                    batch.update(orgRef, {
+                        orgPendingEarnings: increment(-earning.orgShare),
+                        orgWalletBalance: increment(earning.orgShare)
+                    });
+                    
+                    // Add transaction record for the org
+                    const txRef = doc(collection(db, 'transactions'));
+                    batch.set(txRef, {
+                        userId: earning.orgId,
+                        username: earning.orgName,
+                        type: 'prize', // Using prize type for earnings
+                        amount: earning.orgShare,
+                        method: 'Tournament Earnings',
+                        refId: `EARN-${earning.tournamentId.slice(0, 8)}`,
+                        status: 'success',
+                        timestamp: serverTimestamp(),
+                        desc: `Earnings released for tournament: ${earning.tournamentName}`,
+                        tournamentId: earning.tournamentId,
+                        confirmedBy: profile?.uid,
+                        confirmedByUsername: profile?.username
+                    });
+                    
+                    await batch.commit();
+                    
+                    await NotificationService.create(
+                        earning.orgId,
+                        'Earnings Released',
+                        `${formatCurrency(earning.orgShare)} has been added to your wallet for tournament: ${earning.tournamentName}`,
+                        'success',
+                        '/wallet'
+                    );
+                    
+                    await logAdminAction('earnings_released', `Released ${formatCurrency(earning.orgShare)} to ${earning.orgName} for tournament ${earning.tournamentName}`);
+                    
+                    setTournamentEarnings(prev => prev.map(e => e.id === earning.id ? { ...e, status: 'released' } : e));
+                    showToast('Earnings released successfully', 'success');
+                } catch (error) {
+                    console.error("Error releasing earnings:", error);
+                    showToast('Failed to release earnings', 'error');
+                } finally {
+                    setLoading(false);
+                    closeConfirmModal();
+                }
+            }
+        });
+    };
+
     if (profile?.role !== 'admin') return <div className="text-center text-red-500 mt-10">Restricted Area</div>;
 
+    const pendingDepositsCount = pendingTransactions.filter(t => t.type === 'deposit').length;
+    const pendingWithdrawalsCount = pendingTransactions.filter(t => t.type === 'withdrawal').length;
+    const pendingOrgCount = orgApplications.length;
+
     return (
-        <div className="animate-fade-in max-w-7xl mx-auto flex flex-col md:flex-row gap-6">
+        <div className="animate-fade-in max-w-7xl mx-auto flex flex-col md:flex-row gap-6 relative">
+            {/* Mobile Sidebar Toggle */}
+            <button 
+                className="md:hidden flex items-center justify-between bg-card p-4 rounded-2xl border border-gray-800 w-full"
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            >
+                <span className="font-bold text-white">Admin Menu</span>
+                {isSidebarOpen ? <X className="w-6 h-6 text-gray-400" /> : <Sliders className="w-6 h-6 text-gray-400" />}
+            </button>
+
             {/* Sidebar Navigation */}
-            <div className="w-full md:w-64 shrink-0 space-y-6 bg-card p-4 rounded-2xl border border-gray-800 h-fit sticky top-24">
+            <div className={`w-full md:w-64 shrink-0 space-y-6 bg-card p-4 rounded-2xl border border-gray-800 h-fit md:sticky md:top-24 ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
                 <div>
                     <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">Main</div>
                     <div className="space-y-1">
                         <button 
-                            onClick={() => setActiveTab('tab-dashboard')} 
+                            onClick={() => { setActiveTab('tab-dashboard'); setIsSidebarOpen(false); }} 
                             className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
                                 activeTab === 'tab-dashboard' 
                                     ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
@@ -972,7 +1182,7 @@ const AdminPanel: React.FC = () => {
                             Dashboard
                         </button>
                         <button 
-                            onClick={() => setActiveTab('tab-users')} 
+                            onClick={() => { setActiveTab('tab-users'); setIsSidebarOpen(false); }} 
                             className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
                                 activeTab === 'tab-users' 
                                     ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
@@ -989,8 +1199,8 @@ const AdminPanel: React.FC = () => {
                     <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">Financial</div>
                     <div className="space-y-1">
                         {[
-                            { id: 'pending-deposits', icon: ArrowDown, label: 'Pending Deposits' },
-                            { id: 'pending-withdrawals', icon: ArrowUp, label: 'Pending Withdrawals' },
+                            { id: 'pending-deposits', icon: ArrowDown, label: 'Pending Deposits', badge: pendingDepositsCount },
+                            { id: 'pending-withdrawals', icon: ArrowUp, label: 'Pending Withdrawals', badge: pendingWithdrawalsCount },
                             { id: 'tx-history', icon: CreditCard, label: 'Transaction History' }
                         ].map(tab => {
                             const Icon = tab.icon;
@@ -998,15 +1208,22 @@ const AdminPanel: React.FC = () => {
                             return (
                                 <button 
                                     key={tab.id}
-                                    onClick={() => setActiveTab(`tab-${tab.id}`)} 
-                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                    onClick={() => { setActiveTab(`tab-${tab.id}`); setIsSidebarOpen(false); }} 
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center justify-between ${
                                         isActive 
                                             ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
                                             : 'text-gray-400 hover:bg-dark hover:text-white'
                                     }`}
                                 >
-                                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
-                                    {tab.label}
+                                    <div className="flex items-center gap-3">
+                                        <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                                        {tab.label}
+                                    </div>
+                                    {tab.badge ? (
+                                        <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                            {tab.badge}
+                                        </span>
+                                    ) : null}
                                 </button>
                             );
                         })}
@@ -1017,24 +1234,32 @@ const AdminPanel: React.FC = () => {
                     <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">Organizations</div>
                     <div className="space-y-1">
                         {[
-                            { id: 'org-approvals', icon: Check, label: 'Org Approvals' },
+                            { id: 'org-approvals', icon: Check, label: 'Org Approvals', badge: pendingOrgCount },
                             { id: 'org-tournaments', icon: Trophy, label: 'Org Tournaments' },
-                            { id: 'organizers', icon: Users, label: 'Manage Orgs' }
+                            { id: 'organizers', icon: Users, label: 'Manage Orgs' },
+                            { id: 'org-earnings', icon: DollarSign, label: 'Org Earnings' }
                         ].map(tab => {
                             const Icon = tab.icon;
                             const isActive = activeTab === `tab-${tab.id}`;
                             return (
                                 <button 
                                     key={tab.id}
-                                    onClick={() => setActiveTab(`tab-${tab.id}`)} 
-                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
+                                    onClick={() => { setActiveTab(`tab-${tab.id}`); setIsSidebarOpen(false); }} 
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center justify-between ${
                                         isActive 
                                             ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
                                             : 'text-gray-400 hover:bg-dark hover:text-white'
                                     }`}
                                 >
-                                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
-                                    {tab.label}
+                                    <div className="flex items-center gap-3">
+                                        <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                                        {tab.label}
+                                    </div>
+                                    {tab.badge ? (
+                                        <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                            {tab.badge}
+                                        </span>
+                                    ) : null}
                                 </button>
                             );
                         })}
@@ -1056,7 +1281,7 @@ const AdminPanel: React.FC = () => {
                             return (
                                 <button 
                                     key={tab.id}
-                                    onClick={() => setActiveTab(`tab-${tab.id}`)} 
+                                    onClick={() => { setActiveTab(`tab-${tab.id}`); setIsSidebarOpen(false); }} 
                                     className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
                                         isActive 
                                             ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
@@ -1075,7 +1300,7 @@ const AdminPanel: React.FC = () => {
                     <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 px-2">System</div>
                     <div className="space-y-1">
                         <button 
-                            onClick={() => setActiveTab('tab-settings')} 
+                            onClick={() => { setActiveTab('tab-settings'); setIsSidebarOpen(false); }} 
                             className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition flex items-center gap-3 ${
                                 activeTab === 'tab-settings' 
                                     ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
@@ -1093,14 +1318,14 @@ const AdminPanel: React.FC = () => {
             <div className="flex-1 bg-card rounded-2xl border border-gray-800 p-6 min-h-[600px]">
                 {activeTab === 'tab-dashboard' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div className="col-span-full grid grid-cols-1 md:grid-cols-3 gap-6 mb-2">
+                    <div className="col-span-full grid grid-cols-1 md:grid-cols-4 gap-6 mb-2">
                         <div className="relative overflow-hidden bg-gradient-to-br from-blue-900/40 to-blue-900/10 p-6 rounded-2xl border border-blue-500/20 flex items-center gap-5 group">
                             <div className="absolute -right-6 -top-6 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all"></div>
                             <div className="w-14 h-14 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-xl border border-blue-500/30 shadow-lg shadow-blue-500/20">
                                 <Users className="w-7 h-7" />
                             </div>
                             <div>
-                                <div className="text-xs text-blue-200/70 uppercase font-bold tracking-wider mb-1">Total User Holdings</div>
+                                <div className="text-xs text-blue-200/70 uppercase font-bold tracking-wider mb-1">Total Holdings</div>
                                 <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(stats.totalBalance)}</div>
                             </div>
                         </div>
@@ -1124,55 +1349,110 @@ const AdminPanel: React.FC = () => {
                                 <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(stats.todayWith)}</div>
                             </div>
                         </div>
+                        <div className="relative overflow-hidden bg-gradient-to-br from-purple-900/40 to-purple-900/10 p-6 rounded-2xl border border-purple-500/20 flex items-center gap-5 group">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all"></div>
+                            <div className="w-14 h-14 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl border border-purple-500/30 shadow-lg shadow-purple-500/20">
+                                <Users className="w-7 h-7" />
+                            </div>
+                            <div>
+                                <div className="text-xs text-purple-200/70 uppercase font-bold tracking-wider mb-1">Total Users</div>
+                                <div className="text-3xl font-black text-white tracking-tight">{users.length}</div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="bg-card p-6 rounded-2xl border border-gray-800 lg:col-span-2 shadow-xl">
-                        <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
-                            <h2 className="font-bold text-white text-lg flex items-center gap-2">
-                                <Bell className="w-5 h-5 text-brand-400" /> Pending Transactions
-                            </h2>
-                            <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
-                                {pendingTransactions.length} Pending
-                            </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[400px] overflow-y-auto custom-scrollbar content-start pr-2">
-                            {pendingTransactions.length > 0 ? (
-                                pendingTransactions.map(t => (
-                                    <div key={t.id} className="bg-dark/50 hover:bg-dark p-5 rounded-2xl border border-gray-800 hover:border-gray-700 transition-all shadow-md group">
-                                        <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-3">
-                                            <div>
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`font-black tracking-wider ${t.type === 'deposit' ? 'text-green-400' : 'text-red-400'} uppercase text-xs`}>{t.type}</span>
-                                                    <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
+                    <div className="col-span-full grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-card p-6 rounded-2xl border border-gray-800 lg:col-span-2 shadow-xl">
+                            <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+                                <h2 className="font-bold text-white text-lg flex items-center gap-2">
+                                    <Bell className="w-5 h-5 text-brand-400" /> Pending Transactions
+                                </h2>
+                                <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
+                                    {pendingTransactions.length} Pending
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[400px] overflow-y-auto custom-scrollbar content-start pr-2">
+                                {pendingTransactions.length > 0 ? (
+                                    pendingTransactions.map(t => (
+                                        <div key={t.id} className="bg-dark/50 hover:bg-dark p-5 rounded-2xl border border-gray-800 hover:border-gray-700 transition-all shadow-md group">
+                                            <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-3">
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className={`font-black tracking-wider ${t.type === 'deposit' ? 'text-green-400' : 'text-red-400'} uppercase text-xs`}>{t.type}</span>
+                                                        <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
+                                                    </div>
+                                                    <div className="text-white font-bold text-sm mb-1">{t.username || 'Unknown User'}</div>
+                                                    <div className="text-[10px] text-gray-500 font-mono">{getRelativeTime(t.timestamp)}</div>
                                                 </div>
-                                                <div className="text-white font-bold text-sm mb-1">{t.username || 'Unknown User'}</div>
-                                                <div className="text-[10px] text-gray-500 font-mono">{formatDate(t.timestamp)}</div>
+                                                <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
                                             </div>
-                                            <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
+                                            <div className="text-[11px] text-gray-400 mb-5 bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                                <span className="text-gray-600">REF:</span> 
+                                                <span className="text-brand-300 select-all">{t.refId}</span>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <button onClick={() => handleApproveTx(t)} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all">
+                                                    <Check className="w-4 h-4" /> Approve
+                                                </button>
+                                                <button onClick={() => {
+                                                    setConfirmModal({
+                                                        isOpen: true,
+                                                        title: 'Reject Transaction',
+                                                        message: 'Are you sure you want to reject this transaction?',
+                                                        isDestructive: true,
+                                                        onConfirm: () => {
+                                                            executeRejectTx(t, 'Rejected by Admin');
+                                                            closeConfirmModal();
+                                                        }
+                                                    });
+                                                }} className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/30 hover:border-red-500 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all">
+                                                    <X className="w-4 h-4" /> Reject
+                                                </button>
+                                                <button onClick={() => setSelectedTx(t)} className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all">
+                                                    <Eye className="w-4 h-4" /> Review
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="text-[11px] text-gray-400 mb-5 bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
-                                            <span className="text-gray-600">REF:</span> 
-                                            <span className="text-brand-300 select-all">{t.refId}</span>
+                                    ))
+                                ) : (
+                                    <div className="col-span-full h-full flex flex-col items-center justify-center text-gray-500 py-10">
+                                        <div className="w-16 h-16 bg-dark rounded-full flex items-center justify-center mb-4 border border-gray-800">
+                                            <Check className="text-3xl text-green-500/50" />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <button onClick={() => handleApproveTx(t)} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
-                                                <Check className="w-4 h-4" /> Approve
-                                            </button>
-                                            <button onClick={() => setSelectedTx(t)} className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
-                                                <Eye className="w-4 h-4" /> Review
-                                            </button>
-                                        </div>
+                                        <p className="font-bold uppercase tracking-widest text-sm text-gray-600">All Caught Up!</p>
+                                        <p className="text-xs text-gray-700 mt-1">No pending transactions to review.</p>
                                     </div>
-                                ))
-                            ) : (
-                                <div className="col-span-full h-full flex flex-col items-center justify-center text-gray-500 py-10">
-                                    <div className="w-16 h-16 bg-dark rounded-full flex items-center justify-center mb-4 border border-gray-800">
-                                        <Check className="text-3xl text-green-500/50" />
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-card p-6 rounded-2xl border border-gray-800 shadow-xl h-[490px] flex flex-col">
+                            <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+                                <h2 className="font-bold text-white text-lg flex items-center gap-2">
+                                    <Info className="w-5 h-5 text-brand-400" /> Activity Feed
+                                </h2>
+                            </div>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                                {activityLogs.length > 0 ? (
+                                    activityLogs.map(log => (
+                                        <div key={log.id} className="bg-dark/50 p-4 rounded-xl border border-gray-800">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="text-brand-400 font-bold text-sm">{log.action}</span>
+                                                <div className="text-right">
+                                                    <div className="text-[10px] text-gray-500">{formatDate(log.timestamp)}</div>
+                                                    <div className="text-[10px] text-gray-500 font-mono">{getRelativeTime(log.timestamp)}</div>
+                                                </div>
+                                            </div>
+                                            <p className="text-gray-300 text-xs mb-2">{log.details}</p>
+                                            <div className="text-[10px] text-gray-500 font-mono">By: {log.adminEmail}</div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                                        <p className="text-sm">No recent activity.</p>
                                     </div>
-                                    <p className="font-bold uppercase tracking-widest text-sm text-gray-600">All Caught Up!</p>
-                                    <p className="text-xs text-gray-700 mt-1">No pending transactions to review.</p>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -1810,6 +2090,14 @@ const AdminPanel: React.FC = () => {
                                             {org.isBanned ? 'SUSPENDED' : 'ACTIVE'}
                                         </div>
                                     </div>
+                                    <div className="bg-black/30 p-2 rounded-lg border border-gray-800">
+                                        <div className="text-gray-600 uppercase font-bold mb-0.5">Org Wallet</div>
+                                        <div className="text-brand-400 font-bold">{formatCurrency(org.orgWalletBalance || 0)}</div>
+                                    </div>
+                                    <div className="bg-black/30 p-2 rounded-lg border border-gray-800">
+                                        <div className="text-gray-600 uppercase font-bold mb-0.5">Pending</div>
+                                        <div className="text-yellow-500 font-bold">{formatCurrency(org.orgPendingEarnings || 0)}</div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -1853,15 +2141,113 @@ const AdminPanel: React.FC = () => {
                 </div>
             )}
 
+            {activeTab === 'tab-org-earnings' && (
+                <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
+                    <div className="flex justify-between items-center border-b border-gray-700 pb-4">
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                <DollarSign className="text-brand-500" /> Org Earnings
+                            </h2>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-gray-800 text-gray-400 text-sm uppercase tracking-wider">
+                                    <th className="p-4 font-medium">Date</th>
+                                    <th className="p-4 font-medium">Tournament</th>
+                                    <th className="p-4 font-medium">Organizer</th>
+                                    <th className="p-4 font-medium">Total Prize</th>
+                                    <th className="p-4 font-medium">Org Share</th>
+                                    <th className="p-4 font-medium">Status</th>
+                                    <th className="p-4 font-medium text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-800/50">
+                                {tournamentEarnings.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="p-8 text-center text-gray-500">
+                                            No earnings records found.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    tournamentEarnings.map(earning => (
+                                        <tr key={earning.id} className="hover:bg-gray-800/20 transition-colors">
+                                            <td className="p-4 text-gray-300">
+                                                {earning.createdAt?.toDate().toLocaleDateString() || 'N/A'}
+                                            </td>
+                                            <td className="p-4 text-white font-medium">
+                                                {earning.tournamentName}
+                                            </td>
+                                            <td className="p-4 text-gray-300">
+                                                {earning.orgName}
+                                            </td>
+                                            <td className="p-4 text-gray-300">
+                                                {formatCurrency(earning.totalPrizePool)}
+                                            </td>
+                                            <td className="p-4 text-brand-400 font-bold">
+                                                {formatCurrency(earning.orgShare)}
+                                            </td>
+                                            <td className="p-4">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                                    earning.status === 'released' ? 'bg-green-500/20 text-green-400' :
+                                                    'bg-yellow-500/20 text-yellow-400'
+                                                }`}>
+                                                    {earning.status.toUpperCase()}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                {earning.status === 'pending' && (
+                                                    <button
+                                                        onClick={() => handleReleaseEarnings(earning)}
+                                                        className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition"
+                                                    >
+                                                        Release
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
                 {activeTab === 'tab-pending-deposits' && (
                     <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
                         <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-                            <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                                <ArrowDown className="text-green-500" /> Pending Deposits
-                            </h2>
-                            <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
-                                {allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} Pending
-                            </span>
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                    <ArrowDown className="text-green-500" /> Pending Deposits
+                                </h2>
+                                <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
+                                    {allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} Pending
+                                </span>
+                            </div>
+                            {allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').length > 0 && (
+                                <button 
+                                    onClick={() => {
+                                        setConfirmModal({
+                                            isOpen: true,
+                                            title: 'Bulk Approve Deposits',
+                                            message: 'Are you sure you want to approve ALL pending deposits?',
+                                            onConfirm: async () => {
+                                                const pending = allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending');
+                                                for (const t of pending) {
+                                                    await handleApproveTx(t);
+                                                }
+                                                closeConfirmModal();
+                                            }
+                                        });
+                                    }}
+                                    className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition"
+                                >
+                                    Bulk Approve All
+                                </button>
+                            )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[500px] overflow-y-auto custom-scrollbar content-start pr-2">
                             {allTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').length > 0 ? (
@@ -1873,13 +2259,22 @@ const AdminPanel: React.FC = () => {
                                                     <span className="font-black tracking-wider text-green-400 uppercase text-xs">Deposit</span>
                                                     <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
                                                 </div>
-                                                <div className="text-[10px] text-gray-500 font-mono">{formatDate(t.timestamp)}</div>
+                                                <div className="text-white font-bold text-sm">{t.username || 'Unknown User'}</div>
+                                                <div className="text-[10px] text-gray-500 font-mono">{getRelativeTime(t.timestamp)}</div>
                                             </div>
                                             <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
                                         </div>
-                                        <div className="text-[11px] text-gray-400 mb-5 bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
-                                            <span className="text-gray-600">REF:</span> 
-                                            <span className="text-brand-300 select-all">{t.refId}</span>
+                                        <div className="text-[11px] text-gray-400 mb-5 space-y-2">
+                                            <div className="bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                                <span className="text-gray-600">REF:</span> 
+                                                <span className="text-brand-300 select-all">{t.refId}</span>
+                                            </div>
+                                            {t.accountDetails && (
+                                                <div className="bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                                    <span className="text-gray-600">ACC:</span> 
+                                                    <span className="text-brand-300 select-all">{t.accountDetails}</span>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button onClick={() => handleApproveTx(t)} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
@@ -1907,12 +2302,35 @@ const AdminPanel: React.FC = () => {
                 {activeTab === 'tab-pending-withdrawals' && (
                     <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
                         <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-                            <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                                <ArrowUp className="text-red-500" /> Pending Withdrawals
-                            </h2>
-                            <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
-                                {allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').length} Pending
-                            </span>
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                    <ArrowUp className="text-red-500" /> Pending Withdrawals
+                                </h2>
+                                <span className="bg-brand-500/20 text-brand-400 text-xs font-bold px-3 py-1 rounded-full border border-brand-500/30">
+                                    {allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').length} Pending
+                                </span>
+                            </div>
+                            {allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').length > 0 && (
+                                <button 
+                                    onClick={() => {
+                                        setConfirmModal({
+                                            isOpen: true,
+                                            title: 'Bulk Approve Withdrawals',
+                                            message: 'Are you sure you want to approve ALL pending withdrawals?',
+                                            onConfirm: async () => {
+                                                const pending = allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending');
+                                                for (const t of pending) {
+                                                    await handleApproveTx(t);
+                                                }
+                                                closeConfirmModal();
+                                            }
+                                        });
+                                    }}
+                                    className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition"
+                                >
+                                    Bulk Approve All
+                                </button>
+                            )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[500px] overflow-y-auto custom-scrollbar content-start pr-2">
                             {allTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').length > 0 ? (
@@ -1924,13 +2342,22 @@ const AdminPanel: React.FC = () => {
                                                     <span className="font-black tracking-wider text-red-400 uppercase text-xs">Withdrawal</span>
                                                     <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded-full text-gray-300 font-bold tracking-wider">{t.method}</span>
                                                 </div>
-                                                <div className="text-[10px] text-gray-500 font-mono">{formatDate(t.timestamp)}</div>
+                                                <div className="text-white font-bold text-sm">{t.username || 'Unknown User'}</div>
+                                                <div className="text-[10px] text-gray-500 font-mono">{getRelativeTime(t.timestamp)}</div>
                                             </div>
                                             <div className="text-xl font-black text-white tracking-tight">{formatCurrency(Math.abs(t.amount))}</div>
                                         </div>
-                                        <div className="text-[11px] text-gray-400 mb-5 bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
-                                            <span className="text-gray-600">REF:</span> 
-                                            <span className="text-brand-300 select-all">{t.refId}</span>
+                                        <div className="text-[11px] text-gray-400 mb-5 space-y-2">
+                                            <div className="bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                                <span className="text-gray-600">REF:</span> 
+                                                <span className="text-brand-300 select-all">{t.refId}</span>
+                                            </div>
+                                            {t.accountDetails && (
+                                                <div className="bg-black/30 p-2 rounded-lg border border-gray-800/50 font-mono flex justify-between items-center">
+                                                    <span className="text-gray-600">ACC:</span> 
+                                                    <span className="text-brand-300 select-all">{t.accountDetails}</span>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button onClick={() => handleApproveTx(t)} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
@@ -2037,7 +2464,10 @@ const AdminPanel: React.FC = () => {
                                             onClick={() => setSelectedTx(t)}
                                             className="border-b border-gray-800/50 hover:bg-gray-800/30 transition cursor-pointer group"
                                         >
-                                            <td className="py-3 px-4 text-gray-400">{formatDate(t.timestamp)}</td>
+                                            <td className="py-3 px-4 text-gray-400">
+                                                <div>{formatDate(t.timestamp)}</div>
+                                                <div className="text-[10px] text-gray-500 font-mono">{getRelativeTime(t.timestamp)}</div>
+                                            </td>
                                             <td className="py-3 px-4">
                                                 <div className="text-white font-bold">{t.username || t.userId.slice(0, 8)}</div>
                                                 <div className="text-[9px] text-gray-500 truncate max-w-[100px]">{t.userEmail}</div>
@@ -2217,58 +2647,170 @@ const AdminPanel: React.FC = () => {
             )}
 
             {activeTab === 'tab-payments' && (
-                <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-bold text-white uppercase tracking-wider">Payment Methods (QR Codes)</h2>
-                        <button 
-                            onClick={() => {
-                                setEditingPayment(null);
-                                setPaymentName('');
-                                setPaymentQr('');
-                                setPaymentInstructions('');
-                                setPaymentType('eSewa');
-                                setPaymentActive(true);
-                                setIsPaymentModalOpen(true);
-                            }}
-                            className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2"
-                        >
-                            <Plus className="w-4 h-4" /> Add Method
-                        </button>
-                    </div>
+                <div className="space-y-12">
+                    {/* Payment Categories Section */}
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">Payment Categories</h2>
+                            <button 
+                                onClick={() => {
+                                    setEditingCategory(null);
+                                    setCategoryName('');
+                                    setCategoryDescription('');
+                                    setCategoryActive(true);
+                                    setIsCategoryModalOpen(true);
+                                }}
+                                className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" /> Add Category
+                            </button>
+                        </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {paymentMethods.map(pm => (
-                            <div key={pm.id} className="bg-card p-4 rounded-xl border border-gray-800 flex flex-col gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 bg-dark rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
-                                        <img src={pm.qrUrl || undefined} className="w-full h-full object-contain" alt="QR" />
-                                    </div>
-                                    <div className="flex-grow">
-                                        <h3 className="font-bold text-white">{pm.name}</h3>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className={`w-2 h-2 rounded-full ${pm.isActive ? 'bg-green-500' : 'bg-gray-600'}`}></span>
-                                            <span className="text-[10px] text-gray-500 uppercase font-bold">{pm.type} | {pm.isActive ? 'Active' : 'Inactive'}</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {paymentCategories.map(cat => (
+                                <div key={cat.id} className="bg-card p-4 rounded-xl border border-gray-800 flex flex-col gap-4">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="font-bold text-white">{cat.name}</h3>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`w-2 h-2 rounded-full ${cat.isActive ? 'bg-green-500' : 'bg-gray-600'}`}></span>
+                                                <span className="text-[10px] text-gray-500 uppercase font-bold">{cat.isActive ? 'Active' : 'Inactive'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => {
+                                                setEditingCategory(cat);
+                                                setCategoryName(cat.name);
+                                                setCategoryDescription(cat.description);
+                                                setCategoryActive(cat.isActive);
+                                                setIsCategoryModalOpen(true);
+                                            }} className="text-blue-400 hover:text-white"><Edit className="w-4 h-4" /></button>
+                                            <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-400 hover:text-white"><Trash className="w-4 h-4" /></button>
                                         </div>
                                     </div>
-                                    <div className="flex flex-col gap-2">
-                                        <button onClick={() => {
-                                            setEditingPayment(pm);
-                                            setPaymentName(pm.name);
-                                            setPaymentQr(pm.qrUrl);
-                                            setPaymentInstructions(pm.instructions);
-                                            setPaymentType(pm.type);
-                                            setPaymentActive(pm.isActive);
-                                            setIsPaymentModalOpen(true);
-                                        }} className="text-blue-400 hover:text-white"><Edit className="w-4 h-4" /></button>
-                                        <button onClick={() => handleDeletePayment(pm.id)} className="text-red-400 hover:text-white"><Trash className="w-4 h-4" /></button>
+                                    <div className="text-[10px] text-gray-500 bg-dark p-2 rounded border border-gray-700 h-16 overflow-y-auto">
+                                        {cat.description || 'No description'}
                                     </div>
                                 </div>
-                                <div className="text-[10px] text-gray-500 bg-dark p-2 rounded border border-gray-700 h-16 overflow-y-auto">
-                                    {pm.instructions}
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Payment Methods Section */}
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">Payment Methods (QR Codes)</h2>
+                            <button 
+                                onClick={() => {
+                                    setEditingPayment(null);
+                                    setPaymentName('');
+                                    setPaymentCategoryId('');
+                                    setPaymentQr('');
+                                    setPaymentInstructions('');
+                                    setPaymentType('eSewa');
+                                    setPaymentActive(true);
+                                    setIsPaymentModalOpen(true);
+                                }}
+                                className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" /> Add Method
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {paymentMethods.map(pm => {
+                                const category = paymentCategories.find(c => c.id === pm.categoryId);
+                                return (
+                                <div key={pm.id} className="bg-card p-4 rounded-xl border border-gray-800 flex flex-col gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-16 h-16 bg-dark rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden">
+                                            <img src={pm.qrUrl || undefined} className="w-full h-full object-contain" alt="QR" />
+                                        </div>
+                                        <div className="flex-grow">
+                                            <h3 className="font-bold text-white">{pm.name}</h3>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`w-2 h-2 rounded-full ${pm.isActive ? 'bg-green-500' : 'bg-gray-600'}`}></span>
+                                                <span className="text-[10px] text-gray-500 uppercase font-bold">{category ? category.name : pm.type} | {pm.isActive ? 'Active' : 'Inactive'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <button onClick={() => {
+                                                setEditingPayment(pm);
+                                                setPaymentName(pm.name);
+                                                setPaymentCategoryId(pm.categoryId || '');
+                                                setPaymentQr(pm.qrUrl);
+                                                setPaymentInstructions(pm.instructions);
+                                                setPaymentType(pm.type);
+                                                setPaymentActive(pm.isActive);
+                                                setIsPaymentModalOpen(true);
+                                            }} className="text-blue-400 hover:text-white"><Edit className="w-4 h-4" /></button>
+                                            <button onClick={() => handleDeletePayment(pm.id)} className="text-red-400 hover:text-white"><Trash className="w-4 h-4" /></button>
+                                        </div>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 bg-dark p-2 rounded border border-gray-700 h-16 overflow-y-auto">
+                                        {pm.instructions}
+                                    </div>
+                                </div>
+                            )})}
+                        </div>
+                    </div>
+
+                    {isCategoryModalOpen && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                            <div className="bg-card w-full max-w-lg rounded-2xl border border-gray-800 p-8 space-y-6 shadow-2xl">
+                                <h3 className="text-xl font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-4">
+                                    {editingCategory ? 'Edit Category' : 'Add Category'}
+                                </h3>
+                                
+                                <div className="space-y-5">
+                                    <div>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Category Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={categoryName}
+                                            onChange={(e) => setCategoryName(e.target.value)}
+                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
+                                            placeholder="e.g. E-Wallet, Bank Transfer"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Description</label>
+                                        <textarea 
+                                            value={categoryDescription}
+                                            onChange={(e) => setCategoryDescription(e.target.value)}
+                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition h-24 resize-none"
+                                            placeholder="Description of this category..."
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <input 
+                                            type="checkbox" 
+                                            id="catActive"
+                                            checked={categoryActive}
+                                            onChange={(e) => setCategoryActive(e.target.checked)}
+                                            className="w-4 h-4 rounded bg-dark border-gray-700 text-brand-500 focus:ring-brand-500"
+                                        />
+                                        <label htmlFor="catActive" className="text-sm text-white font-bold">Active (Visible to users)</label>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 pt-4 border-t border-gray-800">
+                                    <button 
+                                        onClick={() => setIsCategoryModalOpen(false)}
+                                        className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-bold transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={handleSaveCategory}
+                                        className="flex-1 bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition"
+                                    >
+                                        {editingCategory ? 'Update' : 'Save'}
+                                    </button>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    )}
 
                     {isPaymentModalOpen && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -2279,6 +2821,19 @@ const AdminPanel: React.FC = () => {
                                 
                                 <div className="space-y-5">
                                     <div>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Category</label>
+                                        <select 
+                                            value={paymentCategoryId}
+                                            onChange={(e) => setPaymentCategoryId(e.target.value)}
+                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
+                                        >
+                                            <option value="">Select a category</option>
+                                            {paymentCategories.map(cat => (
+                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Method Name</label>
                                         <input 
                                             type="text" 
@@ -2287,19 +2842,6 @@ const AdminPanel: React.FC = () => {
                                             className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
                                             placeholder="e.g. eSewa (Personal)"
                                         />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Type</label>
-                                        <select 
-                                            value={paymentType}
-                                            onChange={(e) => setPaymentType(e.target.value as any)}
-                                            className="w-full bg-dark border border-gray-700 rounded-lg p-3 text-white focus:border-brand-500 outline-none transition"
-                                        >
-                                            <option value="eSewa">eSewa</option>
-                                            <option value="Khalti">Khalti</option>
-                                            <option value="Bank">Bank Transfer</option>
-                                            <option value="Other">Other</option>
-                                        </select>
                                     </div>
                                     <div>
                                         <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">QR Code Image (Paste or Drop)</label>

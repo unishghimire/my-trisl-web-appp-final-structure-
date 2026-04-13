@@ -4,11 +4,12 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch, 
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { Tournament, TournamentGroup, Match, Team } from '../types';
+import { Tournament, TournamentGroup, Match, Team, TournamentEarning } from '../types';
 import { 
     Settings, Users, Calendar, Trophy, ArrowLeft, 
     Plus, Trash2, Edit2, CheckCircle2, AlertCircle,
-    Lock, Unlock, Link as LinkIcon, QrCode, Play, Pause
+    Lock, Unlock, Link as LinkIcon, QrCode, Play, Pause,
+    DollarSign, TrendingUp, TrendingDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
@@ -20,6 +21,7 @@ export default function TournamentAdminPanel() {
     const { showToast } = useNotification();
     
     const [tournament, setTournament] = useState<Tournament | null>(null);
+    const [tournamentEarning, setTournamentEarning] = useState<TournamentEarning | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'matches' | 'brackets' | 'settings'>('overview');
 
@@ -47,6 +49,15 @@ export default function TournamentAdminPanel() {
                         return;
                     }
                     setTournament(data);
+                    
+                    // Fetch tournament earnings if completed
+                    if (data.status === 'completed') {
+                        const earningQuery = query(collection(db, 'tournamentEarnings'), where('tournamentId', '==', id));
+                        const earningSnap = await getDocs(earningQuery);
+                        if (!earningSnap.empty) {
+                            setTournamentEarning({ id: earningSnap.docs[0].id, ...earningSnap.docs[0].data() } as TournamentEarning);
+                        }
+                    }
                     
                     // Fetch participants
                     setFetchingParticipants(true);
@@ -466,6 +477,43 @@ export default function TournamentAdminPanel() {
                             className="space-y-6"
                         >
                             <h2 className="text-lg font-black uppercase tracking-widest text-white border-b border-gray-800 pb-4">Tournament Controls</h2>
+                            
+                            {tournamentEarning && (
+                                <div className="bg-surface/50 border border-brand-500/20 rounded-2xl p-6 mb-6">
+                                    <h3 className="text-sm font-black text-brand-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <DollarSign className="w-4 h-4" /> Tournament Financials
+                                    </h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                        <div>
+                                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Total Entry Fees</p>
+                                            <p className="text-xl font-black text-white">₹{tournamentEarning.entryFeeTotal.toLocaleString()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Total Prize Pool</p>
+                                            <p className="text-xl font-black text-white">₹{tournamentEarning.prizePoolTotal.toLocaleString()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Net Profit</p>
+                                            <p className={`text-xl font-black ${tournamentEarning.profit > 0 ? 'text-green-500' : 'text-red-500'} flex items-center gap-1`}>
+                                                {tournamentEarning.profit > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                                                ₹{tournamentEarning.profit.toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Your Share (85%)</p>
+                                            <p className="text-xl font-black text-brand-400">₹{tournamentEarning.orgShare.toLocaleString()}</p>
+                                            <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                                                tournamentEarning.status === 'released' ? 'bg-green-500/10 text-green-500' :
+                                                tournamentEarning.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500' :
+                                                'bg-gray-800 text-gray-500'
+                                            }`}>
+                                                {tournamentEarning.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="bg-surface p-4 rounded-xl border border-gray-800">
                                     <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Status Control</h3>

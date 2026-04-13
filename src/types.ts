@@ -24,6 +24,7 @@ export interface UserProfile {
     rankChange?: number;
     phone: string;
     isBanned: boolean;
+    banReason?: string;
     createdAt: Timestamp | any;
     orgStatus?: 'pending' | 'approved' | 'rejected';
     orgName?: string;
@@ -39,6 +40,8 @@ export interface UserProfile {
     status?: 'online' | 'idle' | 'dnd' | 'offline';
     customActivity?: string;
     lastActive?: Timestamp | any;
+    orgPendingEarnings?: number;
+    orgWalletBalance?: number;
     stats?: {
         totalMatches: number;
         wins: number;
@@ -199,12 +202,21 @@ export interface Transaction {
     tournamentId?: string;
 }
 
+export interface PaymentCategory {
+    id: string;
+    name: string;
+    description: string;
+    isActive: boolean;
+    createdAt: Timestamp | any;
+}
+
 export interface PaymentMethod {
     id: string;
+    categoryId: string; // Reference to PaymentCategory
     name: string;
     qrUrl: string;
     instructions: string;
-    type: 'eSewa' | 'Khalti' | 'Bank' | 'Other';
+    type: string; // Kept for backwards compatibility or specific provider name
     isActive: boolean;
     createdAt: Timestamp | any;
 }
@@ -335,6 +347,7 @@ export interface OrgApplication {
     email: string;
     proofLink: string;
     status: 'pending' | 'approved' | 'rejected';
+    rejectReason?: string;
     timestamp: Timestamp | any;
 }
 
@@ -348,4 +361,36 @@ export interface OrgPost {
     imageUrl?: string;
     createdAt: Timestamp | any;
     updatedAt?: Timestamp | any;
+}
+
+export interface ActivityLog {
+    id: string;
+    adminId: string;
+    adminEmail?: string;
+    action: string;
+    details: string;
+    timestamp: Timestamp | any;
+}
+
+export interface BroadcastNotification {
+    id: string;
+    message: string;
+    sentBy: string;
+    sentAt: Timestamp | any;
+}
+
+export interface TournamentEarning {
+    id: string;
+    tournamentId: string;
+    tournamentName: string;
+    orgId: string;
+    orgName: string;
+    entryFeeTotal: number;
+    prizePoolTotal: number;
+    profit: number;
+    orgShare: number;
+    nexplayShare: number;
+    status: 'pending' | 'released' | 'no_earnings';
+    createdAt: Timestamp | any;
+    releasedAt?: Timestamp | any;
 }

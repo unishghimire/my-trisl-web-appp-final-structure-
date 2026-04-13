@@ -49,13 +49,13 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
          (request.auth.token.email == "unishghimire2@gmail.com" && request.auth.token.email_verified == true));
     }
 
     function isOrganizer() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'organizer' || isAdmin());
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'organizer') || isAdmin());
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -145,6 +145,19 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'pending');
       allow update, delete: if isAdmin();
+    }
+
+    // Disputes
+    match /disputes/{disputeId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Payment Categories
+    match /paymentCategories/{categoryId} {
+      allow read: if resource.data.isActive == true || isAdmin();
+      allow write: if isAdmin();
     }
 
     // Payment Methods
@@ -249,6 +262,12 @@ service cloud.firestore {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated();
       allow update, delete: if isAdmin();
+    }
+
+    // Tournament Earnings
+    match /tournamentEarnings/{earningId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.organizerId == request.auth.uid);
+      allow write: if isAdmin();
     }
 
     // Settings

@@ -95,15 +95,45 @@
       },
       "required": ["userId", "title", "message", "type", "read", "timestamp"]
     },
+    "Dispute": {
+      "title": "Dispute",
+      "description": "User reported dispute for a transaction",
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "resolved", "closed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["transactionId", "userId", "reason", "status", "createdAt"]
+    },
+    "PaymentCategory": {
+      "title": "PaymentCategory",
+      "description": "Admin-managed payment categories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "isActive", "createdAt"]
+    },
     "PaymentMethod": {
       "title": "PaymentMethod",
       "description": "Admin-managed payment methods and QR codes",
       "type": "object",
       "properties": {
+        "categoryId": { "type": "string" },
         "name": { "type": "string" },
         "qrUrl": { "type": "string" },
         "instructions": { "type": "string" },
-        "type": { "type": "string", "enum": ["eSewa", "Khalti", "Bank", "Other"] },
+        "type": { "type": "string" },
         "isActive": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -215,6 +245,14 @@
     "/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "User notification records"
+    },
+    "/disputes/{disputeId}": {
+      "schema": "Dispute",
+      "description": "User reported disputes"
+    },
+    "/paymentCategories/{categoryId}": {
+      "schema": "PaymentCategory",
+      "description": "Payment category documents"
     },
     "/paymentMethods/{methodId}": {
       "schema": "PaymentMethod",

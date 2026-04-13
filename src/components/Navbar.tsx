@@ -7,12 +7,7 @@ import { Notification } from '../types';
 import ProfileDropdown from './navbar/ProfileDropdown';
 import WalletDisplay from './navbar/WalletDisplay';
 
-interface NavbarProps {
-    openDepositModal: () => void;
-    openWithdrawModal: () => void;
-}
-
-const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) => {
+const Navbar: React.FC = () => {
     const { user, profile, logout } = useAuth();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -141,7 +136,7 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
                                         </div>
                                     )}
                                 </div>
-                                <WalletDisplay balance={profile?.balance || 0} onClick={openDepositModal} />
+                                <WalletDisplay balance={profile?.balance || 0} onClick={() => navigate('/wallet')} />
                                 <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />
                             </>
                         ) : (
@@ -190,7 +185,7 @@ const Navbar: React.FC<NavbarProps> = ({ openDepositModal, openWithdrawModal }) 
                                 )}
                             </div>
                         )}
-                        {user && <WalletDisplay balance={profile?.balance || 0} onClick={openDepositModal} />}
+                        {user && <WalletDisplay balance={profile?.balance || 0} onClick={() => navigate('/wallet')} />}
                         {user && <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />}
                         <button onClick={toggleMobileMenu} className="text-gray-400 hover:text-white p-1 rounded-md focus:outline-none">
                             {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

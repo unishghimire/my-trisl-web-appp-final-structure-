@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, updateDoc, getDoc, writeBatch, increment, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Tournament, Participant } from '../types';
-import { Plus, Settings, Play, Save, Upload, Trophy, Users, DollarSign, Calendar, LayoutDashboard, Search, Filter, Trash2, Eye, Map as MapIcon, Gamepad, ChevronRight, Edit } from 'lucide-react';
+import { Plus, Settings, Play, Save, Upload, Trophy, Users, DollarSign, Calendar, LayoutDashboard, Search, Filter, Trash2, Eye, Map as MapIcon, Gamepad, ChevronRight, Edit, CreditCard, Clock } from 'lucide-react';
 import Modal from '../components/Modal';
 import { NotificationService } from '../services/NotificationService';
 import { useNotification } from '../context/NotificationContext';
 import ResultUploadModal from '../components/ResultUploadModal';
 import TournamentCreateModal from '../components/TournamentCreateModal';
 import { motion, AnimatePresence } from 'motion/react';
-import { deleteDoc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 
 const OrganizerPanel: React.FC = () => {
@@ -116,14 +115,58 @@ const OrganizerPanel: React.FC = () => {
     const handleUpdateStatus = async (status: 'upcoming' | 'live' | 'completed' | 'current') => {
         if (!selectedTournament) return;
         try {
+            const batch = writeBatch(db);
             const tRef = doc(db, 'tournaments', selectedTournament.id);
             const newStatus = status === 'current' ? selectedTournament.status : status;
             
-            await updateDoc(tRef, {
+            batch.update(tRef, {
                 roomId,
                 roomPass,
                 status: newStatus
             });
+
+            if (status === 'completed' && selectedTournament.status !== 'completed') {
+                // Calculate earnings
+                const participantsSnap = await getDocs(query(collection(db, 'participants'), where('tournamentId', '==', selectedTournament.id)));
+                const exactPlayers = participantsSnap.docs.length;
+                
+                const entryFeeTotal = selectedTournament.entryFee * exactPlayers;
+                const prizePoolTotal = selectedTournament.prizePool;
+                const profit = entryFeeTotal - prizePoolTotal;
+                
+                let orgShare = 0;
+                let nexplayShare = 0;
+                let earningStatus: 'pending' | 'no_earnings' = 'no_earnings';
+                
+                if (profit > 0) {
+                    orgShare = profit * 0.85;
+                    nexplayShare = profit * 0.15;
+                    earningStatus = 'pending';
+                    
+                    // Add to org pending earnings
+                    const orgRef = doc(db, 'users', selectedTournament.hostUid);
+                    batch.update(orgRef, {
+                        orgPendingEarnings: increment(orgShare)
+                    });
+                }
+                
+                const earningRef = doc(collection(db, 'tournamentEarnings'));
+                batch.set(earningRef, {
+                    tournamentId: selectedTournament.id,
+                    tournamentName: selectedTournament.title,
+                    orgId: selectedTournament.hostUid,
+                    orgName: selectedTournament.hostName || 'Unknown Org',
+                    entryFeeTotal,
+                    prizePoolTotal,
+                    profit,
+                    orgShare,
+                    nexplayShare,
+                    status: earningStatus,
+                    createdAt: serverTimestamp()
+                });
+            }
+            
+            await batch.commit();
             
             if (status === 'live') {
                 await NotificationService.notifyParticipants(
@@ -161,7 +204,9 @@ const OrganizerPanel: React.FC = () => {
         total: hostedTournaments.length,
         live: hostedTournaments.filter(t => t.status === 'live').length,
         completed: hostedTournaments.filter(t => t.status === 'completed').length,
-        totalPrize: hostedTournaments.reduce((acc, t) => acc + (t.prizePool || 0), 0)
+        totalPrize: hostedTournaments.reduce((acc, t) => acc + (t.prizePool || 0), 0),
+        orgWallet: profile?.orgWalletBalance || 0,
+        pendingEarnings: profile?.orgPendingEarnings || 0
     };
 
     if (profile?.role !== 'organizer' && profile?.role !== 'admin') {
@@ -205,12 +250,14 @@ const OrganizerPanel: React.FC = () => {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-10">
                 {[
                     { label: 'Total Hosted', value: stats.total, icon: Trophy, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
                     { label: 'Live Now', value: stats.live, icon: Play, color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/20' },
                     { label: 'Completed', value: stats.completed, icon: Users, color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-green-500/20' },
                     { label: 'Total Prize Pool', value: `₹${stats.totalPrize.toLocaleString()}`, icon: DollarSign, color: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
+                    { label: 'Org Wallet', value: `₹${stats.orgWallet.toLocaleString()}`, icon: CreditCard, color: 'text-brand-500', bg: 'bg-brand-500/10', border: 'border-brand-500/20' },
+                    { label: 'Pending Earnings', value: `₹${stats.pendingEarnings.toLocaleString()}`, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
                 ].map((stat, i) => (
                     <motion.div 
                         key={i}

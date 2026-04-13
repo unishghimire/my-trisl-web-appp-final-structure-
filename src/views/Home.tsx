@@ -10,11 +10,6 @@ import { useNavigate } from 'react-router-dom';
 import { Star, ChevronRight, Gamepad2, Wallet, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-interface HomeProps {
-    openDepositModal: () => void;
-    openWithdrawModal: () => void;
-}
-
 // Sample data for Hot Promotions Slider
 const promoSlides: PromoSlide[] = [
     {
@@ -52,7 +47,7 @@ const promoSlides: PromoSlide[] = [
     }
 ];
 
-const Home: React.FC<HomeProps> = ({ openDepositModal, openWithdrawModal }) => {
+const Home: React.FC = () => {
     const { user } = useAuth();
     const [featuredTournaments, setFeaturedTournaments] = useState<Tournament[]>([]);
     const [popularGames, setPopularGames] = useState<Game[]>([]);

@@ -20,6 +20,7 @@ const Tournaments = lazy(() => import('./views/Tournaments'));
 const TournamentDetails = lazy(() => import('./views/TournamentDetails'));
 const Dashboard = lazy(() => import('./views/Dashboard'));
 const Profile = lazy(() => import('./views/Profile'));
+const Wallet = lazy(() => import('./views/Wallet'));
 const Leaderboard = lazy(() => import('./views/Leaderboard'));
 const AdminPanel = lazy(() => import('./views/AdminPanel'));
 const OrganizerPanel = lazy(() => import('./views/OrganizerPanel'));
@@ -56,26 +57,11 @@ import WalletModal from './components/WalletModal';
 const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast: (id: number) => void }) => {
   const location = useLocation();
   const isHome = location.pathname === '/';
-  const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | null>(null);
-
-  const openDepositModal = () => setActiveModal('deposit');
-  const openWithdrawModal = () => setActiveModal('withdraw');
-  const closeModal = () => setActiveModal(null);
-
-  useEffect(() => {
-    closeModal();
-  }, [location.pathname]);
 
   return (
     <div id="app" className="min-h-screen flex flex-col relative">
-      <Navbar openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />
+      <Navbar />
       
-      {/* Wallet Modal */}
-      <WalletModal 
-        isOpen={activeModal !== null} 
-        onClose={closeModal} 
-        initialTab={activeModal === 'withdraw' ? 'withdraw' : 'deposit'} 
-      />
       <Breadcrumbs />
       <ScrollToTop />
       <main id="main-content" className="flex-grow container mx-auto px-4 pt-8 pb-24 relative min-h-[80vh]">
@@ -87,7 +73,7 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
         <ProfileCompletionGuard>
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
-              <Route path="/" element={<Home openDepositModal={openDepositModal} openWithdrawModal={openWithdrawModal} />} />
+              <Route path="/" element={<Home />} />
               <Route path="/tournaments" element={<Tournaments />} />
               <Route path="/games" element={<GamesBrowser />} />
               <Route path="/games/:id" element={<GameModesBrowser />} />
@@ -95,6 +81,7 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
               <Route path="/post/:id" element={<PostDetails />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
               <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfile /></ProtectedRoute>} />
               <Route path="/user/:id" element={<PublicProfile />} />
               <Route path="/profile/:id" element={<PublicProfile />} />
