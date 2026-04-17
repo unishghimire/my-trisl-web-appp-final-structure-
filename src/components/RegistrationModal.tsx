@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { doc, runTransaction, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
 import { Tournament, UserProfile } from '../types';
 import Modal from './Modal';
 import { useNotification } from '../context/NotificationContext';
@@ -8,6 +6,7 @@ import { NotificationService } from '../services/NotificationService';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, Users, DollarSign, ShieldCheck } from 'lucide-react';
+import { walletApiService } from '../services/walletApiService';
 
 interface RegistrationModalProps {
     isOpen: boolean;
@@ -33,47 +32,12 @@ const RegistrationModal: React.FC<RegistrationModalProps> = ({
         if (!user || !tournament || !profile) return;
 
         setLoading(true);
-        const tRef = doc(db, 'tournaments', tournament.id);
-        const userRef = doc(db, 'users', user.uid);
-        const partRef = doc(collection(db, 'participants'));
-
         try {
-            await runTransaction(db, async (transaction) => {
-                const tDoc = await transaction.get(tRef);
-                const uDoc = await transaction.get(userRef);
-                
-                if (!tDoc.exists()) throw new Error("Tournament does not exist!");
-                const tData = tDoc.data() as Tournament;
-                const uData = uDoc.data() as UserProfile;
-
-                if (tData.currentPlayers >= tData.slots) throw new Error("Tournament is Full!");
-                if (uData.balance < tData.entryFee) throw new Error("Insufficient Balance!");
-
-                // Update user balance and XP
-                const currentXP = uData.xp || 0;
-                const newXP = currentXP + 50; // Award 50 XP for joining
-                const newLevel = Math.floor(newXP / 500) + 1;
-
-                transaction.update(userRef, { 
-                    balance: uData.balance - tData.entryFee,
-                    xp: newXP,
-                    level: newLevel
-                });
-                transaction.update(tRef, { currentPlayers: tData.currentPlayers + 1 });
-                
-                const participantData: any = {
-                    userId: user.uid,
-                    tournamentId: tournament.id,
-                    inGameId: uData.inGameId,
-                    inGameName: uData.inGameName || '',
-                    teamName: uData.teamName || '',
-                    teamId: uData.teamId || '',
-                    username: uData.username,
-                    timestamp: serverTimestamp()
-                };
-
-                transaction.set(partRef, participantData);
-            });
+            const result = await walletApiService.joinTournament(tournament.id);
+            
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to join tournament');
+            }
 
             await NotificationService.create(
                 user.uid,
@@ -88,7 +52,8 @@ const RegistrationModal: React.FC<RegistrationModalProps> = ({
             onClose();
             navigate('/dashboard');
         } catch (e: any) {
-            showToast(e.message, 'error');
+            console.error("Join Tournament Error:", e);
+            showToast(e.message || 'Failed to join tournament', 'error');
         } finally {
             setLoading(false);
         }

@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { PaymentMethod, PaymentCategory, SiteSettings, Transaction } from '../types';
 import { formatCurrency } from '../utils';
+import { walletApiService } from '../services/walletApiService';
 
 interface WalletModalProps {
   isOpen: boolean;
@@ -115,32 +116,14 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
 
     setIsSubmitting(true);
     try {
-      const batch = writeBatch(db);
-      const txRef = doc(collection(db, 'transactions'));
-      batch.set(txRef, {
-        userId: user.uid,
-        username: profile?.username || 'Unknown',
-        userEmail: user.email || '',
-        type: 'withdrawal',
-        amount: -amount,
-        method: withdrawMethod,
-        status: 'pending',
-        timestamp: serverTimestamp(),
-        accountDetails: accountDetails,
-        refId: `WIT-${Date.now()}`
-      });
+      const response = await walletApiService.requestWithdrawal(amount, withdrawMethod, accountDetails);
+      if (!response.success) throw new Error(response.error);
 
-      const userRef = doc(db, 'users', user.uid);
-      batch.update(userRef, {
-        balance: increment(-amount)
-      });
-
-      await batch.commit();
       showToast('Withdrawal request submitted!', 'success');
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting withdrawal:", error);
-      showToast('Failed to submit withdrawal request', 'error');
+      showToast(error.message || 'Failed to submit withdrawal request', 'error');
     } finally {
       setIsSubmitting(false);
     }

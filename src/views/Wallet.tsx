@@ -8,6 +8,8 @@ import { Plus, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Walle
 import WalletModal from '../components/WalletModal';
 import { useNotification } from '../context/NotificationContext';
 
+import { walletApiService } from '../services/walletApiService';
+
 const Wallet: React.FC = () => {
     const { user, profile } = useAuth();
     const { showToast } = useNotification();
@@ -54,82 +56,16 @@ const Wallet: React.FC = () => {
         if (!promoCode.trim() || !user) return;
         setIsRedeeming(true);
         try {
-            // 1. Find the promo code
-            const q = query(collection(db, 'promocodes'), where('code', '==', promoCode.trim().toUpperCase()));
-            const snap = await getDocs(q);
-            
-            if (snap.empty) {
-                showToast('Invalid promo code', 'error');
-                setIsRedeeming(false);
-                return;
-            }
+            const response = await walletApiService.redeemPromo(promoCode.trim());
+            if (!response.success) throw new Error(response.error);
 
-            const promoDoc = snap.docs[0];
-            const promoData = promoDoc.data() as PromoCode;
-
-            if (!promoData.isActive) {
-                showToast('This promo code is no longer active', 'error');
-                setIsRedeeming(false);
-                return;
-            }
-
-            if (promoData.currentUses >= promoData.maxUses) {
-                showToast('This promo code has reached its maximum uses', 'error');
-                setIsRedeeming(false);
-                return;
-            }
-
-            // 2. Check if user already used it (check transactions)
-            const txQuery = query(
-                collection(db, 'transactions'),
-                where('userId', '==', user.uid),
-                where('type', '==', 'promo'),
-                where('method', '==', `PROMO:${promoData.code}`)
-            );
-            const txSnap = await getDocs(txQuery);
-            if (!txSnap.empty) {
-                showToast('You have already used this promo code', 'error');
-                setIsRedeeming(false);
-                return;
-            }
-
-            // 3. Apply promo code
-            const batch = writeBatch(db);
-            
-            // Update user balance
-            const userRef = doc(db, 'users', user.uid);
-            batch.update(userRef, {
-                balance: increment(promoData.amount)
-            });
-
-            // Update promo code uses
-            batch.update(promoDoc.ref, {
-                currentUses: increment(1)
-            });
-
-            // Add transaction
-            const newTxRef = doc(collection(db, 'transactions'));
-            batch.set(newTxRef, {
-                userId: user.uid,
-                username: profile?.username || 'Unknown',
-                userEmail: user.email || '',
-                type: 'promo',
-                amount: promoData.amount,
-                method: `PROMO:${promoData.code}`,
-                status: 'completed',
-                timestamp: serverTimestamp(),
-                accountDetails: 'Promo Code Redemption',
-                refId: `PRM-${Date.now()}`
-            });
-
-            await batch.commit();
-            showToast(`Successfully redeemed ${formatCurrency(promoData.amount)}!`, 'success');
+            showToast(`Successfully redeemed ${formatCurrency(response.data.amount)}!`, 'success');
             setPromoCode('');
             setIsPromoModalOpen(false);
             fetchTransactions();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error redeeming promo code:", error);
-            showToast('Failed to redeem promo code', 'error');
+            showToast(error.message || 'Failed to redeem promo code', 'error');
         } finally {
             setIsRedeeming(false);
         }
@@ -165,15 +101,15 @@ const Wallet: React.FC = () => {
     if (!user || !profile) return null;
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+        <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-20">
             {/* Header Section */}
             <div className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-8 border border-gray-800 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
                 
                 <div className="relative z-10">
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16 text-center md:text-left">
-                        <div>
-                            <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center text-center">
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-center gap-2 mb-2">
                                 <WalletIcon className="w-5 h-5 text-brand-500" />
                                 <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Total Balance</h2>
                             </div>
@@ -184,9 +120,8 @@ const Wallet: React.FC = () => {
 
                         {(profile.role === 'organizer' || profile.role === 'admin') && (
                             <>
-                                <div className="h-px w-12 md:h-16 md:w-px bg-gray-800"></div>
-                                <div>
-                                    <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                                <div className="space-y-1 border-t md:border-t-0 md:border-l border-gray-800 pt-8 md:pt-0">
+                                    <div className="flex items-center justify-center gap-2 mb-2">
                                         <DollarSign className="w-5 h-5 text-green-500" />
                                         <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Org Wallet</h2>
                                     </div>
@@ -194,11 +129,10 @@ const Wallet: React.FC = () => {
                                         {formatCurrency(profile.orgWalletBalance || 0)}
                                     </p>
                                 </div>
-                                <div className="h-px w-12 md:h-16 md:w-px bg-gray-800"></div>
-                                <div>
-                                    <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                                <div className="space-y-1 border-t md:border-t-0 md:border-l border-gray-800 pt-8 md:pt-0">
+                                    <div className="flex items-center justify-center gap-2 mb-2">
                                         <Clock className="w-5 h-5 text-yellow-500" />
-                                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Pending Earnings</h2>
+                                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Pending</h2>
                                     </div>
                                     <p className="text-4xl md:text-5xl font-black text-white tracking-tight">
                                         {formatCurrency(profile.orgPendingEarnings || 0)}
@@ -210,25 +144,25 @@ const Wallet: React.FC = () => {
                 </div>
             </div>
 
-            {/* Action Buttons Section */}
-            <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+            {/* Action Buttons Area - Now centered and integrated */}
+            <div className="flex flex-wrap justify-center gap-4 py-4 px-2">
                 <button 
                     onClick={() => setActiveModal('deposit')}
-                    className="flex-1 sm:flex-none bg-brand-600 hover:bg-brand-500 text-white px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all shadow-xl shadow-brand-500/25 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
+                    className="flex-1 min-w-[140px] max-w-[200px] bg-brand-600 hover:bg-brand-500 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 hover:scale-105 active:scale-95"
                 >
-                    <Plus className="w-6 h-6" /> Add Money
+                    <Plus className="w-5 h-5" /> Deposit
                 </button>
                 <button 
                     onClick={() => setActiveModal('withdraw')}
-                    className="flex-1 sm:flex-none bg-gray-800 hover:bg-gray-700 text-white px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all border border-gray-700 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
+                    className="flex-1 min-w-[140px] max-w-[200px] bg-gray-800 hover:bg-gray-700 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-gray-700 flex items-center justify-center gap-2 hover:scale-105 active:scale-95"
                 >
-                    <ArrowUpRight className="w-6 h-6" /> Withdraw
+                    <ArrowUpRight className="w-5 h-5" /> Withdraw
                 </button>
                 <button 
                     onClick={() => setIsPromoModalOpen(true)}
-                    className="flex-1 sm:flex-none bg-gray-800 hover:bg-gray-700 text-brand-400 px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all border border-gray-700 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
+                    className="flex-1 min-w-[140px] max-w-[200px] bg-gray-800 hover:bg-gray-700 text-brand-400 px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-gray-700 flex items-center justify-center gap-2 hover:scale-105 active:scale-95"
                 >
-                    <Gift className="w-6 h-6" /> Redeem Code
+                    <Gift className="w-5 h-5" /> Promo
                 </button>
             </div>
 

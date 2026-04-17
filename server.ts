@@ -9,22 +9,25 @@ import dotenv from "dotenv";
 import fs from "fs";
 import multer from "multer";
 import { getFirestore } from "firebase-admin/firestore";
+import apiRoutes from "./src/server/routes";
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Firebase Admin
+// Initialize Firebase Admin (Singleton check to avoid multiple inits)
 const configPath = path.join(process.cwd(), "firebase-applet-config.json");
 const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
-const firebaseApp = admin.initializeApp({
-  projectId: firebaseConfig.projectId,
-  storageBucket: firebaseConfig.storageBucket,
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: firebaseConfig.projectId,
+    storageBucket: firebaseConfig.storageBucket,
+  });
+}
 
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
 const bucket = admin.storage().bucket();
 const JWT_SECRET = process.env.JWT_SECRET || "nexplay-secret-key-2026";
 
@@ -51,7 +54,10 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Middleware to authenticate JWT token
+  // --- Secure NexPlay Backend API (V2) ---
+  app.use("/api/v2", apiRoutes);
+
+  // Middleware to authenticate JWT token (V1)
   const authenticateToken = (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -416,6 +422,16 @@ app.delete('/api/media/:id', authenticateToken, async (req: any, res) => {
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
+
+  // --- Global Error Handler ---
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("🔥 Global Error Caught:", err);
+    res.status(err.status || 500).json({
+      success: false,
+      error: err.message || "Internal Server Error",
+      code: err.code || "INTERNAL_ERROR"
+    });
+  });
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

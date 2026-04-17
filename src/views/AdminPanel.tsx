@@ -9,10 +9,14 @@ import { formatCurrency, formatDate } from '../utils';
 import { NotificationService } from '../services/NotificationService';
 import ConfirmModal from '../components/ConfirmModal';
 import TournamentCreateModal from '../components/TournamentCreateModal';
+import TransactionDetailModal from '../components/admin/TransactionDetailModal';
+import TransactionHistoryTab from '../components/admin/TransactionHistoryTab';
+import { walletApiService } from '../services/walletApiService';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
 import { DEFAULT_BANNER, NEXPLAY_LOGO } from '../constants';
 import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info, ExternalLink, CheckCircle, DollarSign } from 'lucide-react';
 
+// Admin Panel View - Main Management Hub
 const AdminPanel: React.FC = () => {
     const { profile } = useAuth();
     const { showToast } = useNotification();
@@ -298,21 +302,15 @@ const AdminPanel: React.FC = () => {
         fetchData();
     }, [profile]);
 
+    useEffect(() => {
+        setSelectedTx(null);
+    }, [activeTab]);
+
     const handleApproveTx = async (tx: Transaction) => {
         try {
-            const batch = writeBatch(db);
-            const txRef = doc(db, 'transactions', tx.id);
-            const userRef = doc(db, 'users', tx.userId);
-
-            if (tx.type === 'deposit') {
-                batch.update(userRef, { balance: increment(tx.amount) });
-            }
-            batch.update(txRef, { 
-                status: 'success',
-                confirmedBy: profile?.uid,
-                confirmedByUsername: profile?.username
-            });
-            await batch.commit();
+            setLoading(true);
+            const response = await walletApiService.approveTransaction(tx.id);
+            if (!response.success) throw new Error(response.error);
 
             // Send Notification
             await NotificationService.create(
@@ -330,9 +328,11 @@ const AdminPanel: React.FC = () => {
             if (selectedTx && selectedTx.id === tx.id) {
                 setSelectedTx({ ...selectedTx, status: 'success', confirmedByUsername: profile?.username });
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error approving transaction:", error);
-            showToast('Failed to approve transaction', 'error');
+            showToast(error.message || 'Failed to approve transaction', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -346,24 +346,8 @@ const AdminPanel: React.FC = () => {
             onConfirm: async () => {
                 try {
                     setLoading(true);
-                    const batch = writeBatch(db);
-                    const txRef = doc(db, 'transactions', tx.id);
-                    const userRef = doc(db, 'users', tx.userId);
-
-                    // 1. Update user balance
-                    batch.update(userRef, { balance: increment(Math.abs(tx.amount)) });
-
-                    // 2. Update transaction status
-                    batch.update(txRef, { 
-                        status: 'refunded',
-                        confirmedBy: profile?.uid,
-                        confirmedByUsername: profile?.username
-                    });
-
-                    // 3. Create a new refund record for clarity if needed, 
-                    // but usually updating the original is enough for manual override.
-                    
-                    await batch.commit();
+                    const response = await walletApiService.refundTransaction(tx.id);
+                    if (!response.success) throw new Error(response.error);
 
                     // Send Notification
                     await NotificationService.create(
@@ -377,9 +361,9 @@ const AdminPanel: React.FC = () => {
                     showToast('Transaction Refunded', 'success');
                     setAllTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'refunded' } : t));
                     setSelectedTx(null);
-                } catch (error) {
+                } catch (error: any) {
                     console.error("Error refunding transaction:", error);
-                    showToast('Failed to refund transaction', 'error');
+                    showToast(error.message || 'Failed to refund transaction', 'error');
                 } finally {
                     setLoading(false);
                 }
@@ -389,20 +373,9 @@ const AdminPanel: React.FC = () => {
 
     const executeRejectTx = async (tx: Transaction, reason: string) => {
         try {
-            const batch = writeBatch(db);
-            const txRef = doc(db, 'transactions', tx.id);
-            const userRef = doc(db, 'users', tx.userId);
-
-            if (tx.type === 'withdrawal') {
-                batch.update(userRef, { balance: increment(Math.abs(tx.amount)) });
-            }
-            batch.update(txRef, { 
-                status: 'rejected',
-                rejectionReason: reason || 'No reason provided',
-                confirmedBy: profile?.uid,
-                confirmedByUsername: profile?.username
-            });
-            await batch.commit();
+            setLoading(true);
+            const response = await walletApiService.rejectTransaction(tx.id, reason);
+            if (!response.success) throw new Error(response.error);
 
             // Send Notification
             await NotificationService.create(
@@ -417,9 +390,11 @@ const AdminPanel: React.FC = () => {
             setPendingTransactions(prev => prev.filter(t => t.id !== tx.id));
             setSelectedTx(null);
             setRejectionReason('');
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error rejecting transaction:", error);
-            showToast('Failed to reject transaction', 'error');
+            showToast(error.message || 'Failed to reject transaction', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -443,30 +418,27 @@ const AdminPanel: React.FC = () => {
         if (isNaN(amount)) return showToast('Invalid amount', 'error');
 
         try {
+            setLoading(true);
             const finalAmount = adjustmentType === 'add' ? amount : -amount;
-            await updateDoc(doc(db, 'users', selectedUser.uid), {
-                balance: increment(finalAmount)
-            });
-
-            // Create a manual adjustment transaction
-            const txRef = doc(collection(db, 'transactions'));
-            await setDoc(txRef, {
-                userId: selectedUser.uid,
-                amount: finalAmount,
-                type: 'prize', // Using prize as a generic adjustment type or add 'adjustment'
-                method: 'Manual Adjustment',
-                status: 'success',
-                timestamp: serverTimestamp(),
-                desc: `Admin Adjustment: ${adjustmentType === 'add' ? 'Added' : 'Subtracted'} ${amount}`
-            });
+            
+            // Call Secure Backend API instead of direct update
+            const response = await walletApiService.manualDeposit(
+                selectedUser.uid, 
+                finalAmount, 
+                `admin_adj_${profile?.uid}_${Date.now()}`
+            );
+            
+            if (!response.success) throw new Error(response.error);
 
             showToast('Balance Adjusted', 'success');
             setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? { ...u, balance: u.balance + finalAmount } : u));
             setSelectedUser(null);
             setAdjustmentAmount('');
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error adjusting balance:", error);
-            showToast('Failed to adjust balance', 'error');
+            showToast(error.message || 'Failed to adjust balance', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -1315,8 +1287,9 @@ const AdminPanel: React.FC = () => {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 bg-card rounded-2xl border border-gray-800 p-6 min-h-[600px]">
+            <div className="flex-1 min-h-[600px]">
                 {activeTab === 'tab-dashboard' && (
+                <div className="bg-card p-6 rounded-2xl border border-gray-800 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="col-span-full grid grid-cols-1 md:grid-cols-4 gap-6 mb-2">
                         <div className="relative overflow-hidden bg-gradient-to-br from-blue-900/40 to-blue-900/10 p-6 rounded-2xl border border-blue-500/20 flex items-center gap-5 group">
@@ -1456,121 +1429,6 @@ const AdminPanel: React.FC = () => {
                         </div>
                     </div>
 
-                    {selectedTx && (
-                        <div className="fixed inset-0 bg-black/95 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-fade-in">
-                            <div className="bg-card w-full max-w-2xl rounded-3xl border border-gray-800 p-8 space-y-8 shadow-2xl overflow-y-auto max-h-[90vh]">
-                                <div className="flex justify-between items-center border-b border-gray-800 pb-5">
-                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
-                                        <CreditCard className="text-brand-500" /> Review Transaction
-                                    </h3>
-                                    <button onClick={() => setSelectedTx(null)} className="text-gray-500 hover:text-white bg-dark p-2 rounded-full transition"><X className="w-5 h-5" /></button>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-6">
-                                        <div className="bg-dark p-5 rounded-2xl border border-gray-800 shadow-inner">
-                                            <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-3">Transaction Details</div>
-                                            <div className="flex items-end gap-3 mb-4">
-                                                <div className="text-3xl font-black text-white tracking-tight">{formatCurrency(Math.abs(selectedTx.amount))}</div>
-                                                <div className={`text-sm font-bold uppercase mb-1 ${selectedTx.type === 'deposit' ? 'text-green-400' : 'text-red-400'}`}>{selectedTx.type}</div>
-                                            </div>
-                                            <div className="space-y-2 text-sm font-mono">
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
-                                                    <span className="text-gray-500">Method</span>
-                                                    <span className="text-white">{selectedTx.method}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
-                                                    <span className="text-gray-500">User</span>
-                                                    <span className="text-white">{selectedTx.username || 'Unknown'}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
-                                                    <span className="text-gray-500">Email</span>
-                                                    <span className="text-white text-xs">{selectedTx.userEmail || 'N/A'}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
-                                                    <span className="text-gray-500">User ID</span>
-                                                    <span className="text-gray-400 text-[10px]">{selectedTx.userId}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-2">
-                                                    <span className="text-gray-500">Ref ID</span>
-                                                    <span className="text-brand-300 text-xs">{selectedTx.refId}</span>
-                                                </div>
-                                                {selectedTx.confirmedByUsername && (
-                                                    <div className="flex justify-between border-b border-gray-800/50 pb-2">
-                                                        <span className="text-brand-400">Confirmed By</span>
-                                                        <span className="text-brand-300">{selectedTx.confirmedByUsername}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            
-                                            {selectedTx.accountDetails && (
-                                                <div className="mt-5 p-4 bg-blue-900/10 border border-blue-500/20 rounded-xl">
-                                                    <div className="text-[10px] text-blue-400 uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
-                                                        <Info className="w-3 h-3" /> Account / Transfer Info
-                                                    </div>
-                                                    <div className="text-xs text-blue-100 whitespace-pre-wrap font-mono leading-relaxed">{selectedTx.accountDetails}</div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 block">Rejection Reason (Optional)</label>
-                                            <textarea 
-                                                value={rejectionReason}
-                                                onChange={(e) => setRejectionReason(e.target.value)}
-                                                className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 outline-none h-28 text-sm transition-all"
-                                                placeholder="Explain why this is being rejected..."
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-6">
-                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2">Proof of Payment</div>
-                                        {selectedTx.proofUrl ? (
-                                            <div className="relative group rounded-2xl overflow-hidden border border-gray-800 bg-black">
-                                                <img src={selectedTx.proofUrl || undefined} className="w-full aspect-square object-contain" alt="Proof" />
-                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                                                    <a href={selectedTx.proofUrl} target="_blank" rel="noreferrer" className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all border border-white/10">
-                                                        <Eye className="w-5 h-5" /> View Full Image
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="w-full aspect-square bg-dark/50 rounded-2xl border-2 border-dashed border-gray-800 flex flex-col items-center justify-center text-gray-600">
-                                                <ImageIcon className="w-12 h-12 mb-3 opacity-20" />
-                                                <span className="text-xs font-bold uppercase tracking-widest">No Proof Uploaded</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4 pt-6 border-t border-gray-800">
-                                    {selectedTx.status === 'pending' ? (
-                                        <>
-                                            <button onClick={() => handleRejectTx(selectedTx)} className="flex-1 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/30 hover:border-red-500 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
-                                                Reject
-                                            </button>
-                                            <button onClick={() => handleApproveTx(selectedTx)} className="flex-[2] bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20 py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
-                                                Approve
-                                            </button>
-                                        </>
-                                    ) : selectedTx.status === 'success' && (selectedTx.type === 'withdrawal' || selectedTx.type === 'entry_fee') ? (
-                                        <button 
-                                            onClick={() => handleRefundTx(selectedTx)} 
-                                            className="w-full bg-orange-600 hover:bg-orange-500 text-white py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm shadow-lg shadow-orange-600/20"
-                                        >
-                                            Manual Refund
-                                        </button>
-                                    ) : (
-                                        <button onClick={() => setSelectedTx(null)} className="w-full bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-xl font-black transition-all uppercase tracking-widest text-sm">
-                                            Close
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     <div className="space-y-6">
                         <div className="bg-card p-4 rounded-xl border border-gray-800">
                             <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
@@ -1693,7 +1551,8 @@ const AdminPanel: React.FC = () => {
                         </div>
                     )}
                 </div>
-            )}
+            </div>
+        )}
 
             {activeTab === 'tab-tournaments' && (
                 <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
@@ -2383,130 +2242,22 @@ const AdminPanel: React.FC = () => {
                 )}
 
                 {activeTab === 'tab-tx-history' && (
-                    <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-700 pb-4">
-                            <h2 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                                <CreditCard className="text-brand-500" /> Transaction History
-                            </h2>
-                            <div className="flex flex-wrap gap-2">
-                                <select 
-                                    value={txFilterType} 
-                                    onChange={e => setTxFilterType(e.target.value as any)}
-                                    className="bg-dark border border-gray-700 rounded-lg p-2 text-white text-xs focus:border-brand-500 outline-none"
-                                >
-                                    <option value="all">All Types</option>
-                                    <option value="deposit">Deposit</option>
-                                    <option value="withdrawal">Withdrawal</option>
-                                    <option value="prize">Prize</option>
-                                    <option value="refund">Refund</option>
-                                    <option value="entry_fee">Entry Fee</option>
-                                </select>
-                                <select 
-                                    value={txFilterStatus} 
-                                    onChange={e => setTxFilterStatus(e.target.value as any)}
-                                    className="bg-dark border border-gray-700 rounded-lg p-2 text-white text-xs focus:border-brand-500 outline-none"
-                                >
-                                    <option value="all">All Status</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="success">Success</option>
-                                    <option value="rejected">Rejected</option>
-                                    <option value="refunded">Refunded</option>
-                                </select>
-                                <select 
-                                    value={txFilterTournament} 
-                                    onChange={e => setTxFilterTournament(e.target.value)}
-                                    className="bg-dark border border-gray-700 rounded-lg p-2 text-white text-xs focus:border-brand-500 outline-none w-40"
-                                >
-                                    <option value="all">All Tournaments</option>
-                                    {allTournaments.map(t => (
-                                        <option key={t.id} value={t.id}>{t.title}</option>
-                                    ))}
-                                </select>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
-                                    <input 
-                                        type="text" 
-                                        placeholder="Search User..." 
-                                        value={txSearchUser}
-                                        onChange={e => setTxSearchUser(e.target.value)}
-                                        className="bg-dark border border-gray-700 rounded-lg p-2 pl-8 text-white text-xs focus:border-brand-500 outline-none w-40"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="text-[10px] text-gray-500 uppercase tracking-widest border-b border-gray-800">
-                                        <th className="py-3 px-4">Date</th>
-                                        <th className="py-3 px-4">User</th>
-                                        <th className="py-3 px-4">Type</th>
-                                        <th className="py-3 px-4">Method</th>
-                                        <th className="py-3 px-4">Amount</th>
-                                        <th className="py-3 px-4">Status</th>
-                                        <th className="py-3 px-4">Ref ID</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-xs">
-                                    {allTransactions
-                                        .filter(t => {
-                                            const matchesType = txFilterType === 'all' || t.type === txFilterType;
-                                            const matchesStatus = txFilterStatus === 'all' || t.status === txFilterStatus;
-                                            const matchesTournament = txFilterTournament === 'all' || t.tournamentId === txFilterTournament;
-                                            const matchesUser = !txSearchUser || 
-                                                t.username?.toLowerCase().includes(txSearchUser.toLowerCase()) ||
-                                                t.userEmail?.toLowerCase().includes(txSearchUser.toLowerCase());
-                                            return matchesType && matchesStatus && matchesUser && matchesTournament;
-                                        })
-                                        .map(t => (
-                                        <tr 
-                                            key={t.id} 
-                                            onClick={() => setSelectedTx(t)}
-                                            className="border-b border-gray-800/50 hover:bg-gray-800/30 transition cursor-pointer group"
-                                        >
-                                            <td className="py-3 px-4 text-gray-400">
-                                                <div>{formatDate(t.timestamp)}</div>
-                                                <div className="text-[10px] text-gray-500 font-mono">{getRelativeTime(t.timestamp)}</div>
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <div className="text-white font-bold">{t.username || t.userId.slice(0, 8)}</div>
-                                                <div className="text-[9px] text-gray-500 truncate max-w-[100px]">{t.userEmail}</div>
-                                                {t.confirmedByUsername && <div className="text-[9px] text-brand-400 uppercase font-black">By: {t.confirmedByUsername}</div>}
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <span className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${
-                                                    t.type === 'deposit' ? 'bg-green-900/30 text-green-400 border border-green-500/30' :
-                                                    t.type === 'withdrawal' ? 'bg-red-900/30 text-red-400 border border-red-500/30' :
-                                                    t.type === 'refund' ? 'bg-orange-900/30 text-orange-400 border border-orange-500/30' :
-                                                    'bg-blue-900/30 text-blue-400 border border-blue-500/30'
-                                                }`}>
-                                                    {t.type}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-gray-400">{t.method}</td>
-                                            <td className={`py-3 px-4 font-bold ${t.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                {formatCurrency(t.amount)}
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <span className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${
-                                                    t.status === 'success' ? 'bg-green-600 text-white' :
-                                                    t.status === 'pending' ? 'bg-yellow-600 text-white' :
-                                                    t.status === 'refunded' ? 'bg-orange-600 text-white' :
-                                                    'bg-red-600 text-white'
-                                                }`}>
-                                                    {t.status}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-gray-500 font-mono flex items-center justify-between">
-                                                {t.refId || 'N/A'}
-                                                <Eye className="w-3 h-3 opacity-0 group-hover:opacity-100 transition text-brand-400" />
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <TransactionHistoryTab 
+                        allTransactions={allTransactions}
+                        allTournaments={allTournaments}
+                        setSelectedTx={setSelectedTx}
+                        formatDate={formatDate}
+                        getRelativeTime={getRelativeTime}
+                        formatCurrency={formatCurrency}
+                        txFilterType={txFilterType}
+                        setTxFilterType={setTxFilterType}
+                        txFilterStatus={txFilterStatus}
+                        setTxFilterStatus={setTxFilterStatus}
+                        txFilterTournament={txFilterTournament}
+                        setTxFilterTournament={setTxFilterTournament}
+                        txSearchUser={txSearchUser}
+                        setTxSearchUser={setTxSearchUser}
+                    />
                 )}
 
             {activeTab === 'tab-games' && (
@@ -3201,6 +2952,20 @@ const AdminPanel: React.FC = () => {
                 onClose={closeConfirmModal}
                 isDestructive={confirmModal.isDestructive}
             />
+
+            {selectedTx && (
+                <TransactionDetailModal 
+                    selectedTx={selectedTx}
+                    onClose={() => setSelectedTx(null)}
+                    onDashboard={() => { setSelectedTx(null); setActiveTab('tab-dashboard'); }}
+                    onApprove={handleApproveTx}
+                    onReject={handleRejectTx}
+                    onRefund={handleRefundTx}
+                    rejectionReason={rejectionReason}
+                    setRejectionReason={setRejectionReason}
+                    getRelativeTime={getRelativeTime}
+                />
+            )}
         </div>
     );
 };
