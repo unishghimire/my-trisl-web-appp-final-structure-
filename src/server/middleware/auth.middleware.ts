@@ -42,9 +42,9 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       role: userData.role as Role
     };
     next();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Auth Error:", error);
-    return res.status(401).json({ success: false, error: "Invalid or expired token", code: "AUTH_INVALID" });
+    return res.status(401).json({ success: false, error: `Auth Error: ${error.message || 'Invalid token'}`, code: "AUTH_INVALID" });
   }
 };
 
