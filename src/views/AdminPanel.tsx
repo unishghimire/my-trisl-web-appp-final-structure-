@@ -11,7 +11,6 @@ import ConfirmModal from '../components/ConfirmModal';
 import TournamentCreateModal from '../components/TournamentCreateModal';
 import TransactionDetailModal from '../components/admin/TransactionDetailModal';
 import TransactionHistoryTab from '../components/admin/TransactionHistoryTab';
-import { walletApiService } from '../services/walletApiService';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
 import { DEFAULT_BANNER, NEXPLAY_LOGO } from '../constants';
 import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info, ExternalLink, CheckCircle, DollarSign } from 'lucide-react';
@@ -308,9 +307,19 @@ const AdminPanel: React.FC = () => {
 
     const handleApproveTx = async (tx: Transaction) => {
         try {
-            setLoading(true);
-            const response = await walletApiService.approveTransaction(tx.id);
-            if (!response.success) throw new Error(response.error);
+            const batch = writeBatch(db);
+            const txRef = doc(db, 'transactions', tx.id);
+            const userRef = doc(db, 'users', tx.userId);
+
+            if (tx.type === 'deposit') {
+                batch.update(userRef, { balance: increment(tx.amount) });
+            }
+            batch.update(txRef, { 
+                status: 'success',
+                confirmedBy: profile?.uid,
+                confirmedByUsername: profile?.username
+            });
+            await batch.commit();
 
             // Send Notification
             await NotificationService.create(
@@ -328,11 +337,9 @@ const AdminPanel: React.FC = () => {
             if (selectedTx && selectedTx.id === tx.id) {
                 setSelectedTx({ ...selectedTx, status: 'success', confirmedByUsername: profile?.username });
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error approving transaction:", error);
-            showToast(error.message || 'Failed to approve transaction', 'error');
-        } finally {
-            setLoading(false);
+            showToast('Failed to approve transaction', 'error');
         }
     };
 
@@ -346,8 +353,24 @@ const AdminPanel: React.FC = () => {
             onConfirm: async () => {
                 try {
                     setLoading(true);
-                    const response = await walletApiService.refundTransaction(tx.id);
-                    if (!response.success) throw new Error(response.error);
+                    const batch = writeBatch(db);
+                    const txRef = doc(db, 'transactions', tx.id);
+                    const userRef = doc(db, 'users', tx.userId);
+
+                    // 1. Update user balance
+                    batch.update(userRef, { balance: increment(Math.abs(tx.amount)) });
+
+                    // 2. Update transaction status
+                    batch.update(txRef, { 
+                        status: 'refunded',
+                        confirmedBy: profile?.uid,
+                        confirmedByUsername: profile?.username
+                    });
+
+                    // 3. Create a new refund record for clarity if needed, 
+                    // but usually updating the original is enough for manual override.
+                    
+                    await batch.commit();
 
                     // Send Notification
                     await NotificationService.create(
@@ -361,9 +384,9 @@ const AdminPanel: React.FC = () => {
                     showToast('Transaction Refunded', 'success');
                     setAllTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'refunded' } : t));
                     setSelectedTx(null);
-                } catch (error: any) {
+                } catch (error) {
                     console.error("Error refunding transaction:", error);
-                    showToast(error.message || 'Failed to refund transaction', 'error');
+                    showToast('Failed to refund transaction', 'error');
                 } finally {
                     setLoading(false);
                 }
@@ -373,9 +396,20 @@ const AdminPanel: React.FC = () => {
 
     const executeRejectTx = async (tx: Transaction, reason: string) => {
         try {
-            setLoading(true);
-            const response = await walletApiService.rejectTransaction(tx.id, reason);
-            if (!response.success) throw new Error(response.error);
+            const batch = writeBatch(db);
+            const txRef = doc(db, 'transactions', tx.id);
+            const userRef = doc(db, 'users', tx.userId);
+
+            if (tx.type === 'withdrawal') {
+                batch.update(userRef, { balance: increment(Math.abs(tx.amount)) });
+            }
+            batch.update(txRef, { 
+                status: 'rejected',
+                rejectionReason: reason || 'No reason provided',
+                confirmedBy: profile?.uid,
+                confirmedByUsername: profile?.username
+            });
+            await batch.commit();
 
             // Send Notification
             await NotificationService.create(
@@ -390,11 +424,9 @@ const AdminPanel: React.FC = () => {
             setPendingTransactions(prev => prev.filter(t => t.id !== tx.id));
             setSelectedTx(null);
             setRejectionReason('');
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error rejecting transaction:", error);
-            showToast(error.message || 'Failed to reject transaction', 'error');
-        } finally {
-            setLoading(false);
+            showToast('Failed to reject transaction', 'error');
         }
     };
 
@@ -418,27 +450,30 @@ const AdminPanel: React.FC = () => {
         if (isNaN(amount)) return showToast('Invalid amount', 'error');
 
         try {
-            setLoading(true);
             const finalAmount = adjustmentType === 'add' ? amount : -amount;
-            
-            // Call Secure Backend API instead of direct update
-            const response = await walletApiService.manualDeposit(
-                selectedUser.uid, 
-                finalAmount, 
-                `admin_adj_${profile?.uid}_${Date.now()}`
-            );
-            
-            if (!response.success) throw new Error(response.error);
+            await updateDoc(doc(db, 'users', selectedUser.uid), {
+                balance: increment(finalAmount)
+            });
+
+            // Create a manual adjustment transaction
+            const txRef = doc(collection(db, 'transactions'));
+            await setDoc(txRef, {
+                userId: selectedUser.uid,
+                amount: finalAmount,
+                type: 'prize', // Using prize as a generic adjustment type or add 'adjustment'
+                method: 'Manual Adjustment',
+                status: 'success',
+                timestamp: serverTimestamp(),
+                desc: `Admin Adjustment: ${adjustmentType === 'add' ? 'Added' : 'Subtracted'} ${amount}`
+            });
 
             showToast('Balance Adjusted', 'success');
             setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? { ...u, balance: u.balance + finalAmount } : u));
             setSelectedUser(null);
             setAdjustmentAmount('');
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error adjusting balance:", error);
-            showToast(error.message || 'Failed to adjust balance', 'error');
-        } finally {
-            setLoading(false);
+            showToast('Failed to adjust balance', 'error');
         }
     };
 
@@ -1287,9 +1322,8 @@ const AdminPanel: React.FC = () => {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 min-h-[600px]">
+            <div className="flex-1 bg-card rounded-2xl border border-gray-800 p-6 min-h-[600px]">
                 {activeTab === 'tab-dashboard' && (
-                <div className="bg-card p-6 rounded-2xl border border-gray-800 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="col-span-full grid grid-cols-1 md:grid-cols-4 gap-6 mb-2">
                         <div className="relative overflow-hidden bg-gradient-to-br from-blue-900/40 to-blue-900/10 p-6 rounded-2xl border border-blue-500/20 flex items-center gap-5 group">
@@ -1429,6 +1463,20 @@ const AdminPanel: React.FC = () => {
                         </div>
                     </div>
 
+                    {selectedTx && (
+                        <TransactionDetailModal 
+                            selectedTx={selectedTx}
+                            onClose={() => setSelectedTx(null)}
+                            onDashboard={() => { setSelectedTx(null); setActiveTab('tab-dashboard'); }}
+                            onApprove={handleApproveTx}
+                            onReject={handleRejectTx}
+                            onRefund={handleRefundTx}
+                            rejectionReason={rejectionReason}
+                            setRejectionReason={setRejectionReason}
+                            getRelativeTime={getRelativeTime}
+                        />
+                    )}
+
                     <div className="space-y-6">
                         <div className="bg-card p-4 rounded-xl border border-gray-800">
                             <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
@@ -1551,8 +1599,7 @@ const AdminPanel: React.FC = () => {
                         </div>
                     )}
                 </div>
-            </div>
-        )}
+            )}
 
             {activeTab === 'tab-tournaments' && (
                 <div className="bg-card p-6 rounded-xl border border-gray-800 space-y-6">
@@ -2952,20 +2999,6 @@ const AdminPanel: React.FC = () => {
                 onClose={closeConfirmModal}
                 isDestructive={confirmModal.isDestructive}
             />
-
-            {selectedTx && (
-                <TransactionDetailModal 
-                    selectedTx={selectedTx}
-                    onClose={() => setSelectedTx(null)}
-                    onDashboard={() => { setSelectedTx(null); setActiveTab('tab-dashboard'); }}
-                    onApprove={handleApproveTx}
-                    onReject={handleRejectTx}
-                    onRefund={handleRefundTx}
-                    rejectionReason={rejectionReason}
-                    setRejectionReason={setRejectionReason}
-                    getRelativeTime={getRelativeTime}
-                />
-            )}
         </div>
     );
 };

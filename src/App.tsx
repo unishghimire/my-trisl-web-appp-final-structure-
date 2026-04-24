@@ -20,7 +20,7 @@ const Tournaments = lazy(() => import('./views/Tournaments'));
 const TournamentDetails = lazy(() => import('./views/TournamentDetails'));
 const Dashboard = lazy(() => import('./views/Dashboard'));
 const Profile = lazy(() => import('./views/Profile'));
-import Wallet from './views/Wallet';
+const Wallet = lazy(() => import('./views/Wallet'));
 const Leaderboard = lazy(() => import('./views/Leaderboard'));
 const AdminPanel = lazy(() => import('./views/AdminPanel'));
 const OrganizerPanel = lazy(() => import('./views/OrganizerPanel'));
@@ -51,6 +51,8 @@ const LoadingFallback = () => (
     <p className="text-xs text-gray-500 font-black uppercase tracking-widest">Loading...</p>
   </div>
 );
+
+import WalletModal from './components/WalletModal';
 
 const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast: (id: number) => void }) => {
   const location = useLocation();

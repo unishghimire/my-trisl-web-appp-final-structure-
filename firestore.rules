@@ -50,7 +50,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && 
         ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-         request.auth.token.email == "unishghimire2@gmail.com");
+         (request.auth.token.email == "unishghimire2@gmail.com" && request.auth.token.email_verified == true));
     }
 
     function isOrganizer() {
@@ -97,28 +97,10 @@ service cloud.firestore {
       allow update: if (isOwner(userId) && 
         isValidUser(request.resource.data) &&
         request.resource.data.role == resource.data.role && // Cannot change own role
-        request.resource.data.balance == resource.data.balance && // Cannot change own balance (SERVER ONLY)
-        request.resource.data.totalEarnings == resource.data.totalEarnings && // SERVER ONLY
+        request.resource.data.balance == resource.data.balance && // Cannot change own balance
+        request.resource.data.totalEarnings == resource.data.totalEarnings &&
         request.resource.data.uid == resource.data.uid &&
         request.resource.data.email == resource.data.email) || isAdmin();
-    }
-
-    // Ledger (Admin SDK only)
-    match /ledger/{entryId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if false; // Cloud Functions / Backend only
-    }
-
-    // Idempotency (Admin SDK only)
-    match /idempotencyKeys/{keyId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if false; // Cloud Functions / Backend only
-    }
-
-    // Admin Logs
-    match /adminLogs/{logId} {
-      allow read: if isAdmin();
-      allow write: if false; // Cloud Functions / Backend only
     }
 
     // Public User Profiles (For Leaderboard)

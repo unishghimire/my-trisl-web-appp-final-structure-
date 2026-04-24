@@ -215,51 +215,6 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "logoUrl", "modes", "isPublished", "createdAt"]
-    },
-    "LedgerEntry": {
-      "title": "LedgerEntry",
-      "description": "Immutable double-entry style financial record",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "amount": { "type": "number" },
-        "balanceBefore": { "type": "number" },
-        "balanceAfter": { "type": "number" },
-        "type": { "type": "string", "enum": ["CREDIT", "DEBIT"] },
-        "category": { "type": "string", "enum": ["deposit", "withdrawal", "entry_fee", "prize", "refund", "organizer_share", "adjustment"] },
-        "referenceId": { "type": "string" },
-        "metadata": { "type": "object" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      },
-      "required": ["userId", "amount", "balanceBefore", "balanceAfter", "type", "category", "referenceId", "timestamp"]
-    },
-    "IdempotencyKey": {
-      "title": "IdempotencyKey",
-      "description": "Tracking for idempotent requests",
-      "type": "object",
-      "properties": {
-        "key": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
-        "response": { "type": "object" },
-        "userId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "expiresAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["key", "status", "userId", "createdAt", "expiresAt"]
-    },
-    "AdminLog": {
-      "title": "AdminLog",
-      "description": "Audit logs for administrative actions",
-      "type": "object",
-      "properties": {
-        "adminId": { "type": "string" },
-        "action": { "type": "string" },
-        "targetId": { "type": "string" },
-        "details": { "type": "string" },
-        "metadata": { "type": "object" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      },
-      "required": ["adminId", "action", "timestamp"]
     }
   },
   "firestore": {
@@ -302,18 +257,6 @@
     "/paymentMethods/{methodId}": {
       "schema": "PaymentMethod",
       "description": "Payment method and QR code documents"
-    },
-    "/ledger/{entryId}": {
-      "schema": "LedgerEntry",
-      "description": "Financial ledger entries"
-    },
-    "/idempotencyKeys/{keyId}": {
-      "schema": "IdempotencyKey",
-      "description": "Idempotency tracking"
-    },
-    "/adminLogs/{logId}": {
-      "schema": "AdminLog",
-      "description": "Administrative audit logs"
     }
   }
 }
