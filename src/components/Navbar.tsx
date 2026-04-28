@@ -71,34 +71,36 @@ const Navbar: React.FC = () => {
     const isActive = (path: string) => location.pathname === path;
 
     return (
-        <nav className="sticky top-0 z-50 bg-dark/80 backdrop-blur-md border-b border-gray-800 transition-all duration-200">
-            <div className="container mx-auto px-4 sm:px-6">
-                <div className="flex items-center justify-between h-16 sm:h-20 max-w-full">
+        <nav className="sticky top-0 z-50 bg-dark/90 backdrop-blur-xl border-b border-gray-800 transition-all duration-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="relative flex items-center justify-between h-16 sm:h-20">
                     {/* Left Section: Logo */}
-                    <Link to="/" className="flex items-center gap-2 sm:gap-3 shrink-0 group">
-                        <img src="https://github.com/unishghimire/nexplay-logo/blob/main/nexplay.jpg?raw=true" alt="Nexplay Logo" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow-md group-hover:scale-105 transition-transform" />
-                        <span className="text-lg sm:text-2xl font-black tracking-widest text-white leading-none">NEX<span className="text-brand-500">PLAY</span></span>
+                    <Link to="/" className="flex items-center gap-3 shrink-0 group z-10">
+                        <img src="https://github.com/unishghimire/nexplay-logo/blob/main/nexplay.jpg?raw=true" alt="Nexplay Logo" className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg shadow-md group-hover:scale-105 transition-transform" />
+                        <span className="text-xl sm:text-2xl font-black tracking-widest text-white leading-none">NEX<span className="text-brand-500">PLAY</span></span>
                     </Link>
 
                     {/* Center Section: Navigation (Desktop) */}
-                    <div className="hidden lg:flex items-center gap-1 mx-4">
-                        {navLinks.map((link) => (
-                            <Link 
-                                key={link.path} 
-                                to={link.path} 
-                                className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 flex items-center ${isActive(link.path) ? 'bg-brand-500/10 text-brand-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-                            >
-                                {link.name}
-                            </Link>
-                        ))}
+                    <div className="hidden lg:flex absolute inset-0 items-center justify-center pointer-events-none">
+                        <div className="flex items-center space-x-1 pointer-events-auto bg-dark/50 backdrop-blur-md px-2 py-1.5 rounded-full border border-gray-800/50 shadow-xl">
+                            {navLinks.map((link) => (
+                                <Link 
+                                    key={link.path} 
+                                    to={link.path} 
+                                    className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 flex items-center whitespace-nowrap ${isActive(link.path) ? 'bg-brand-500 text-white shadow-md shadow-brand-500/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                >
+                                    {link.name}
+                                </Link>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Right Section: Profile, Wallet, Notifications */}
-                    <div className="flex items-center justify-end gap-2 sm:gap-4 shrink-0">
+                    <div className="flex items-center justify-end gap-2 sm:gap-4 shrink-0 z-10">
                         {user ? (
                             <>
                                 <div className="relative">
-                                    <button onClick={toggleNotifications} className="text-gray-400 hover:text-white transition-colors relative w-10 h-10 rounded-full hover:bg-white/5 flex items-center justify-center shrink-0">
+                                    <button onClick={toggleNotifications} className="text-gray-400 hover:text-white transition-colors relative w-11 h-11 rounded-full hover:bg-white/5 flex items-center justify-center shrink-0">
                                         <Bell className="w-5 h-5" aria-hidden="true" />
                                         {unreadCount > 0 && (
                                             <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center border-2 border-dark" aria-label={`${unreadCount} unread notifications`}>
@@ -143,7 +145,7 @@ const Navbar: React.FC = () => {
                             </>
                         ) : (
                             <div className="hidden sm:block">
-                                <Link to="/login" className="bg-brand-500 hover:bg-brand-600 text-white h-10 px-6 flex items-center justify-center rounded-full font-black tracking-widest text-sm transition-all shadow-lg hover:shadow-brand-500/25 whitespace-nowrap shrink-0">
+                                <Link to="/login" className="bg-brand-500 hover:bg-brand-600 text-white h-11 px-6 flex items-center justify-center rounded-full font-black tracking-widest text-sm transition-all shadow-lg hover:shadow-brand-500/25 whitespace-nowrap shrink-0">
                                     LOGIN
                                 </Link>
                             </div>
@@ -154,7 +156,7 @@ const Navbar: React.FC = () => {
                             onClick={toggleMobileMenu} 
                             aria-label="Toggle mobile menu" 
                             aria-expanded={isMobileMenuOpen} 
-                            className="lg:hidden text-gray-400 hover:text-white w-10 h-10 rounded-full hover:bg-white/5 transition-colors flex items-center justify-center focus:outline-none ml-1 shrink-0"
+                            className="lg:hidden text-gray-400 hover:text-white w-11 h-11 rounded-full hover:bg-white/5 transition-colors flex items-center justify-center focus:outline-none ml-1 shrink-0"
                         >
                             {isMobileMenuOpen ? <X className="w-6 h-6" aria-hidden="true" /> : <Menu className="w-6 h-6" aria-hidden="true" />}
                         </button>
@@ -163,8 +165,8 @@ const Navbar: React.FC = () => {
             </div>
 
             {/* Mobile Menu (now covers all screens below lg) */}
-            <div className={`lg:hidden absolute top-full left-0 w-full overflow-y-auto transition-all duration-300 ease-in-out bg-dark/95 backdrop-blur-xl border-b border-gray-800 ${isMobileMenuOpen ? 'max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-5rem)] opacity-100 border-t border-gray-800/50' : 'max-h-0 opacity-0 pointer-events-none border-t-0'}`}>
-                <div className="px-4 py-4 space-y-2">
+            <div className={`lg:hidden absolute top-[100%] left-0 w-full transition-all duration-300 ease-in-out bg-dark/95 backdrop-blur-xl border-t border-gray-800 ${isMobileMenuOpen ? 'max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-5rem)] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 pointer-events-none border-t-0 overflow-hidden'}`}>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-2">
                     {user && (
                         <div className="flex sm:hidden items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-800">
                             <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />

@@ -33,7 +33,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, 
     <div className="relative" ref={dropdownRef}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-center h-10 gap-2 text-sm font-medium text-gray-300 hover:text-white transition bg-gray-800/50 px-3 md:px-4 rounded-full border border-gray-700 whitespace-nowrap shrink-0"
+        className="flex items-center justify-center h-11 gap-2 text-sm font-medium text-gray-300 hover:text-white transition bg-gray-800/50 px-3 md:px-4 rounded-full border border-gray-700 whitespace-nowrap shrink-0"
       >
         <div className="w-6 h-6 shrink-0 bg-brand-700 rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-gray-800 overflow-hidden">
           {avatarUrl ? <img src={avatarUrl || undefined} className="w-full h-full object-cover" alt="Avatar" /> : username[0].toUpperCase()}
