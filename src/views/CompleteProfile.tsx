@@ -39,29 +39,21 @@ const CompleteProfile: React.FC = () => {
             const userRef = doc(db, 'users', user.uid);
             const publicRef = doc(db, 'users_public', user.uid);
 
-            try {
-                await updateDoc(userRef, {
-                    inGameId: inGameId.trim(),
-                    inGameName: inGameName.trim(),
-                    profilePicUrl: selectedAvatar,
-                    updatedAt: serverTimestamp()
-                });
-            } catch (e) {
-                console.error("userRef update failed", e);
-                throw e;
-            }
+            batch.set(userRef, {
+                inGameId: inGameId.trim(),
+                inGameName: inGameName.trim(),
+                profilePicUrl: selectedAvatar,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
 
-            try {
-                await updateDoc(publicRef, {
-                    inGameId: inGameId.trim(),
-                    inGameName: inGameName.trim(),
-                    profilePicUrl: selectedAvatar,
-                    updatedAt: serverTimestamp()
-                });
-            } catch (e) {
-                console.error("publicRef update failed", e);
-                throw e;
-            }
+            batch.set(publicRef, {
+                inGameId: inGameId.trim(),
+                inGameName: inGameName.trim(),
+                profilePicUrl: selectedAvatar,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+
+            await batch.commit();
 
             showToast('Profile completed! Welcome to NexPlayOrg.', 'success');
             navigate('/dashboard');

@@ -88,6 +88,7 @@ const AdminPanel: React.FC = () => {
     const [supportPhone, setSupportPhone] = useState('');
     const [notice, setNotice] = useState('');
     const [isNoticeActive, setIsNoticeActive] = useState(false);
+    const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [orgFormDescription, setOrgFormDescription] = useState('');
     const [broadcastMessage, setBroadcastMessage] = useState('');
 
@@ -276,11 +277,12 @@ const AdminPanel: React.FC = () => {
                 if (settingsSnap.exists()) {
                     const data = settingsSnap.data() as SiteSettings;
                     setSiteSettings(data);
-                    setMinWithdrawal(data.minWithdrawal.toString());
-                    setSupportEmail(data.supportEmail);
-                    setSupportPhone(data.supportPhone);
-                    setNotice(data.notice);
-                    setIsNoticeActive(data.isNoticeActive);
+                    setMinWithdrawal(data.minWithdrawal?.toString() || '');
+                    setSupportEmail(data.supportEmail || '');
+                    setSupportPhone(data.supportPhone || '');
+                    setNotice(data.notice || '');
+                    setIsNoticeActive(data.isNoticeActive || false);
+                    setMaintenanceMode(data.maintenanceMode || false);
                     setOrgFormDescription(data.orgFormDescription || '');
                 }
 
@@ -985,6 +987,7 @@ const AdminPanel: React.FC = () => {
                 supportPhone,
                 notice,
                 isNoticeActive,
+                maintenanceMode,
                 isOrgFormOpen: siteSettings?.isOrgFormOpen ?? true,
                 orgFormDescription,
                 updatedAt: serverTimestamp()
@@ -1475,20 +1478,6 @@ const AdminPanel: React.FC = () => {
                         </div>
                     </div>
 
-                    {selectedTx && (
-                        <TransactionDetailModal 
-                            selectedTx={selectedTx}
-                            onClose={() => setSelectedTx(null)}
-                            onDashboard={() => { setSelectedTx(null); setActiveTab('tab-dashboard'); }}
-                            onApprove={handleApproveTx}
-                            onReject={handleRejectTx}
-                            onRefund={handleRefundTx}
-                            rejectionReason={rejectionReason}
-                            setRejectionReason={setRejectionReason}
-                            getRelativeTime={getRelativeTime}
-                        />
-                    )}
-
                     <div className="space-y-6">
                         <div className="bg-card p-4 rounded-xl border border-gray-800">
                             <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
@@ -1646,7 +1635,7 @@ const AdminPanel: React.FC = () => {
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
                                                     t.status === 'upcoming' ? 'bg-blue-600/20 text-blue-400' :
-                                                    t.status === 'ongoing' ? 'bg-green-600/20 text-green-400' :
+                                                    t.status === 'live' ? 'bg-green-600/20 text-green-400' :
                                                     t.status === 'cancelled' ? 'bg-red-600/20 text-red-400' :
                                                     'bg-gray-600/20 text-gray-400'
                                                 }`}>
@@ -1781,7 +1770,7 @@ const AdminPanel: React.FC = () => {
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
                                                     t.status === 'upcoming' ? 'bg-blue-600/20 text-blue-400' :
-                                                    t.status === 'ongoing' ? 'bg-green-600/20 text-green-400' :
+                                                    t.status === 'live' ? 'bg-green-600/20 text-green-400' :
                                                     t.status === 'cancelled' ? 'bg-red-600/20 text-red-400' :
                                                     'bg-gray-600/20 text-gray-400'
                                                 }`}>
@@ -1974,7 +1963,7 @@ const AdminPanel: React.FC = () => {
                                         <button 
                                             onClick={() => {
                                                 setEditingOrg(org);
-                                                setOrgEmail(org.email);
+                                                setOrgEmail(org.email || '');
                                                 setOrgDiscord(org.discord || '');
                                                 setOrgYoutube(org.youtube || '');
                                                 setOrgWhatsapp(org.whatsapp || '');
@@ -2102,7 +2091,7 @@ const AdminPanel: React.FC = () => {
                                                 {earning.orgName}
                                             </td>
                                             <td className="p-4 text-gray-300">
-                                                {formatCurrency(earning.totalPrizePool)}
+                                                {formatCurrency(earning.prizePoolTotal)}
                                             </td>
                                             <td className="p-4 text-brand-400 font-bold">
                                                 {formatCurrency(earning.orgShare)}
@@ -2870,6 +2859,21 @@ const AdminPanel: React.FC = () => {
                         </div>
 
                         <div className="col-span-full space-y-6">
+                            <h3 className="text-sm font-bold text-brand-400 uppercase tracking-widest border-l-2 border-brand-500 pl-3">Maintenance</h3>
+                            <div className="bg-dark p-4 rounded-xl border border-gray-800 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <AlertTriangle className="text-red-500 w-5 h-5" />
+                                        <span className="text-sm text-white font-bold uppercase">Maintenance Mode</span>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" checked={maintenanceMode} onChange={e => setMaintenanceMode(e.target.checked)} className="sr-only peer" />
+                                        <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                                    </label>
+                                </div>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase">When enabled, the entire website will be disabled for normal users. Only Admins can access the site.</p>
+                            </div>
+
                             <h3 className="text-sm font-bold text-brand-400 uppercase tracking-widest border-l-2 border-brand-500 pl-3">System Notice</h3>
                             <div className="bg-dark p-4 rounded-xl border border-gray-800 space-y-4">
                                 <div className="flex items-center justify-between">
@@ -2898,7 +2902,7 @@ const AdminPanel: React.FC = () => {
                                         <span className="text-sm text-white font-bold uppercase">Open Organizer Applications</span>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" checked={siteSettings?.isOrgFormOpen} onChange={toggleOrgForm} className="sr-only peer" />
+                                        <input type="checkbox" checked={siteSettings?.isOrgFormOpen || false} onChange={toggleOrgForm} className="sr-only peer" />
                                         <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                                     </label>
                                 </div>
@@ -3003,12 +3007,26 @@ const AdminPanel: React.FC = () => {
                 </div>
             )}
 
+            {selectedTx && (
+                <TransactionDetailModal 
+                    selectedTx={selectedTx}
+                    onClose={() => setSelectedTx(null)}
+                    onDashboard={() => { setSelectedTx(null); setActiveTab('tab-dashboard'); }}
+                    onApprove={handleApproveTx}
+                    onReject={handleRejectTx}
+                    onRefund={handleRefundTx}
+                    rejectionReason={rejectionReason}
+                    setRejectionReason={setRejectionReason}
+                    getRelativeTime={getRelativeTime}
+                />
+            )}
+
             <ConfirmModal
                 isOpen={confirmModal.isOpen}
                 title={confirmModal.title}
                 message={confirmModal.message}
                 onConfirm={confirmModal.onConfirm}
-                onClose={closeConfirmModal}
+                onCancel={closeConfirmModal}
                 isDestructive={confirmModal.isDestructive}
             />
         </div>

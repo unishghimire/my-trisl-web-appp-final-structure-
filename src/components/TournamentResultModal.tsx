@@ -81,7 +81,7 @@ const TournamentResultModal: React.FC<TournamentResultModalProps> = ({ isOpen, o
                                 <h2 className="text-xl font-black text-white uppercase tracking-tight">{tournament.title}</h2>
                                 <div className="flex items-center gap-3 mt-1">
                                     <span className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                        <Calendar className="w-3 h-3" /> {formatDate(tournament.date)}
+                                        <Calendar className="w-3 h-3" /> {formatDate(tournament.startTime || tournament.createdAt)}
                                     </span>
                                     <span className="w-1 h-1 rounded-full bg-gray-700"></span>
                                     <span className="flex items-center gap-1 text-[10px] font-bold text-green-400 uppercase tracking-widest bg-green-500/10 px-2 py-0.5 rounded-sm">

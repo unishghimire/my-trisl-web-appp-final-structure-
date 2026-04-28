@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X, Bell, Crown } from 'lucide-react';
+import { Menu, X, Bell, Crown, Wallet } from 'lucide-react';
 import { NotificationService } from '../services/NotificationService';
 import { Notification } from '../types';
 import ProfileDropdown from './navbar/ProfileDropdown';
 import WalletDisplay from './navbar/WalletDisplay';
+import { formatCurrency } from '../utils';
 
 const Navbar: React.FC = () => {
     const { user, profile, logout } = useAuth();
@@ -53,10 +54,7 @@ const Navbar: React.FC = () => {
     };
 
     const navLinks = [
-        { name: 'Home', path: '/' },
-        { name: 'Games', path: '/games' },
-        { name: 'Tournaments', path: '/tournaments' },
-        { name: 'Teams', path: '/teams' },
+        { name: 'Home', path: '/' }
     ];
 
     if (user) {
@@ -168,9 +166,17 @@ const Navbar: React.FC = () => {
             <div className={`lg:hidden absolute top-[100%] left-0 w-full transition-all duration-300 ease-in-out bg-dark/95 backdrop-blur-xl border-t border-gray-800 ${isMobileMenuOpen ? 'max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-5rem)] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 pointer-events-none border-t-0 overflow-hidden'}`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-2">
                     {user && (
-                        <div className="flex sm:hidden items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-800">
-                            <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />
-                            <WalletDisplay balance={profile?.balance || 0} onClick={() => navigate('/wallet')} />
+                        <div className="flex sm:hidden items-center p-4 gap-4 mb-4 bg-gray-800/20 rounded-xl border border-gray-800/50">
+                            <div className="w-12 h-12 shrink-0 bg-brand-700 rounded-full flex items-center justify-center font-bold text-lg ring-2 ring-brand-500 overflow-hidden">
+                                {profile?.profilePicUrl ? <img src={profile.profilePicUrl} className="w-full h-full object-cover" alt="Avatar" /> : (profile?.username || 'U')[0].toUpperCase()}
+                            </div>
+                            <div className="flex-1 overflow-hidden">
+                                <div className="font-bold text-white truncate text-lg">{(profile?.username || 'User')}</div>
+                                <div className="text-sm font-black text-brand-400 mt-1 cursor-pointer flex items-center gap-1 w-max px-2 py-1 bg-brand-900/20 rounded-lg hover:bg-brand-900/40 transition" onClick={() => { navigate('/wallet'); setIsMobileMenuOpen(false); }}>
+                                    <Wallet className="w-4 h-4" />
+                                    {formatCurrency(profile?.balance || 0)}
+                                </div>
+                            </div>
                         </div>
                     )}
                     

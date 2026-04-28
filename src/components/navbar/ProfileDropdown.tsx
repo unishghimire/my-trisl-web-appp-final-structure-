@@ -50,9 +50,6 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, 
           <Link to="/profile" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
             <User className="w-4 h-4" /> View Profile
           </Link>
-          <Link to="/teams" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
-            <Users className="w-4 h-4" /> My Teams
-          </Link>
           <button onClick={() => { onLogout(); setIsOpen(false); }} className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-surface hover:text-red-300 transition">
             <LogOut className="w-4 h-4" /> Logout
           </button>

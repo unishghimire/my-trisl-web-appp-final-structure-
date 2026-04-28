@@ -63,6 +63,7 @@ export interface ManualResult {
     rank: number;
     score: number;
     status: string;
+    kills?: number;
 }
 
 export interface ResultTemplateConfig {
@@ -132,6 +133,7 @@ export interface Team {
     ranking?: number;
     rankChange?: number;
     points?: number;
+    wins?: number;
     totalEarnings?: number;
     players?: string[]; // Array of user IDs
     captainId?: string;
@@ -187,11 +189,11 @@ export interface Transaction {
     userId: string;
     username?: string;
     userEmail?: string;
-    type: 'deposit' | 'withdrawal' | 'prize' | 'refund' | 'entry_fee';
+    type: 'deposit' | 'withdrawal' | 'withdraw' | 'prize' | 'refund' | 'entry_fee' | 'promo';
     amount: number;
     method: string;
     refId: string;
-    status: 'pending' | 'success' | 'rejected' | 'refunded';
+    status: 'pending' | 'success' | 'completed' | 'rejected' | 'refunded';
     timestamp: Timestamp | any;
     desc?: string;
     proofUrl?: string;
@@ -312,6 +314,7 @@ export interface SiteSettings {
     isNoticeActive: boolean;
     isOrgFormOpen: boolean;
     orgFormDescription?: string;
+    maintenanceMode?: boolean;
     updatedAt: Timestamp | any;
 }
 

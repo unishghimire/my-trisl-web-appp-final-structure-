@@ -108,6 +108,8 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
           ? new Date(editTournament.startTime.toDate().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
           : new Date(new Date(editTournament.startTime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
         rules: editTournament.rules,
+        matchType: editTournament.matchType || 'tournament',
+        scheduleType: editTournament.scheduleType || 'auto',
         prizeDistribution: editTournament.prizeDistribution && editTournament.prizeDistribution.length > 0 
           ? editTournament.prizeDistribution.map(p => ({
               id: p.id || `prize-${Date.now()}-${Math.random()}`,
@@ -134,6 +136,8 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
         entryFee: 0,
         startTime: '',
         rules: '',
+        matchType: 'tournament',
+        scheduleType: 'auto',
         prizeDistribution: [
           { id: 'prize-initial-1', rank: 1, label: '1st', amount: 0 },
         ]
@@ -240,6 +244,8 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
           entryFee: 0,
           startTime: '',
           rules: '',
+          matchType: 'tournament',
+          scheduleType: 'auto',
           prizeDistribution: [
             { id: 'prize-initial-1', rank: 1, label: '1st', amount: 0 },
           ] as any[]

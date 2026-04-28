@@ -459,15 +459,6 @@ const Profile: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                        <div onClick={() => navigate('/teams')} className="bg-card p-6 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 bg-brand-500/10 rounded-lg border border-brand-500/20 text-brand-400">
-                                    <Users className="w-5 h-5" />
-                                </div>
-                                <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Teams Dashboard</span>
-                            </div>
-                            <div className="text-sm font-bold text-gray-400 group-hover:text-white transition">Manage your teams</div>
-                        </div>
                     </div>
 
                     {/* Bio & Skills */}
@@ -582,7 +573,7 @@ const Profile: React.FC = () => {
                 </div>
             </Modal>
 
-            <Modal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} title="Account Settings" size="lg">
+            <Modal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} title="Account Settings">
                 <div className="p-6 max-h-[80vh] overflow-y-auto space-y-8">
                     {/* Edit Profile Form */}
                     <div className="space-y-6">

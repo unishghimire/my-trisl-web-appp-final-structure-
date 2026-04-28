@@ -69,7 +69,7 @@ const OrganizerPanel: React.FC = () => {
         try {
             const q = query(collection(db, 'participants'), where('tournamentId', '==', t.id));
             const snap = await getDocs(q);
-            setParticipants(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setParticipants(snap.docs.map(d => ({ id: d.id, ...d.data() } as Participant)));
         } catch (error) {
             console.error("Error fetching participants:", error);
         }

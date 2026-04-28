@@ -142,17 +142,6 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="animate-fade-in max-w-3xl mx-auto">
-            {/* Site Notice */}
-            {settings?.showNotice && settings.siteNotice && (
-                <div className="mb-6 bg-brand-900/20 border border-brand-500/30 p-4 rounded-xl flex gap-3 items-start animate-pulse">
-                    <AlertTriangle className="text-brand-400 shrink-0 w-5 h-5 mt-0.5" />
-                    <div className="text-xs text-brand-200 leading-relaxed font-bold uppercase">
-                        <span className="block text-brand-400 mb-1">IMPORTANT NOTICE</span>
-                        {settings.siteNotice}
-                    </div>
-                </div>
-            )}
-
             <h2 className="text-2xl font-bold mb-6 text-white border-b border-gray-800 pb-4">My Dashboard</h2>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -168,12 +157,12 @@ const Dashboard: React.FC = () => {
                     </div>
                     <h3 className="text-white font-black uppercase tracking-widest text-[10px] group-hover:text-brand-400 transition">Teams</h3>
                 </div>
-                <div onClick={() => navigate('/tournaments')} className="bg-card p-4 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex flex-col items-center text-center gap-2">
+                <a href="#my-tournaments" className="bg-card p-4 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex flex-col items-center text-center gap-2">
                     <div className="w-10 h-10 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
                         <Trophy className="w-5 h-5 text-brand-500" />
                     </div>
                     <h3 className="text-white font-black uppercase tracking-widest text-[10px] group-hover:text-brand-400 transition">My Tournaments</h3>
-                </div>
+                </a>
                 <div onClick={() => navigate('/leaderboard')} className="bg-card p-4 rounded-2xl border border-gray-800 hover:border-brand-500/50 transition cursor-pointer group shadow-lg flex flex-col items-center text-center gap-2">
                     <div className="w-10 h-10 rounded-full bg-dark flex items-center justify-center border border-gray-700 group-hover:border-brand-500 transition">
                         <BarChart className="w-5 h-5 text-brand-500" />
@@ -182,7 +171,7 @@ const Dashboard: React.FC = () => {
                 </div>
             </div>
 
-            <h3 className="text-xl font-bold mb-4 text-white uppercase tracking-widest">My Tournaments</h3>
+            <h3 id="my-tournaments" className="text-xl font-bold mb-4 text-white uppercase tracking-widest pt-4">My Tournaments</h3>
             <div className="space-y-4">
                 {myTournaments.length > 0 ? (
                     myTournaments.map(t => {

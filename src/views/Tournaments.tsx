@@ -114,7 +114,35 @@ const Tournaments: React.FC = () => {
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">Filters</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Game</label>
+                        <select 
+                            value={gameFilter}
+                            onChange={(e) => {
+                                setGameFilter(e.target.value);
+                                setModeFilter('all');
+                            }}
+                            className="w-full bg-card border border-gray-700 rounded-lg p-2 text-white focus:border-brand-500 outline-none transition text-sm"
+                        >
+                            <option value="all">All Games</option>
+                            {games.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mode</label>
+                        <select 
+                            value={modeFilter}
+                            onChange={(e) => setModeFilter(e.target.value)}
+                            className="w-full bg-card border border-gray-700 rounded-lg p-2 text-white focus:border-brand-500 outline-none transition text-sm"
+                            disabled={gameFilter === 'all' && availableModes.length === 0}
+                        >
+                            <option value="all">All Modes</option>
+                            {availableModes.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Entry Type</label>
                         <select 
@@ -129,7 +157,7 @@ const Tournaments: React.FC = () => {
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Player Quantity</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Player</label>
                         <select 
                             value={teamTypeFilter}
                             onChange={(e) => setTeamTypeFilter(e.target.value)}

@@ -4,6 +4,8 @@ import { X } from 'lucide-react';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { SiteSettingsProvider, useSiteSettings } from './context/SiteSettingsContext';
+import { useAuth } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
 import Breadcrumbs from './components/Breadcrumbs';
@@ -54,14 +56,52 @@ const LoadingFallback = () => (
 );
 
 import WalletModal from './components/WalletModal';
+import { AlertTriangle } from 'lucide-react';
 
 const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast: (id: number) => void }) => {
+  const { user, profile, loading: authLoading } = useAuth();
+  const { settings, loading: settingsLoading } = useSiteSettings();
   const location = useLocation();
   const isHome = location.pathname === '/';
+  
+  if (authLoading || settingsLoading) {
+    return <LoadingFallback />;
+  }
+
+  const isAdmin = profile?.role === 'admin';
+  const isMaintenanceMode = settings?.maintenanceMode && !isAdmin;
+
+  if (isMaintenanceMode && location.pathname !== '/login') {
+    return (
+      <div className="min-h-screen bg-dark flex flex-col items-center justify-center p-4">
+        <div className="text-brand-500 mb-8 font-black text-4xl tracking-widest uppercase">
+          NEXPLAY
+        </div>
+        <AlertTriangle className="w-16 h-16 text-yellow-500 mb-6" />
+        <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-widest text-center mb-4">
+          Site is under maintenance
+        </h1>
+        <p className="text-gray-400 text-center max-w-md font-medium">
+          We are currently performing scheduled maintenance. Please check back later.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div id="app" className="min-h-screen flex flex-col relative overflow-x-hidden">
       <Navbar />
+      
+      {settings?.isNoticeActive && settings.notice && (
+        <div className="bg-brand-900/40 border-b border-brand-500/30 p-2 sm:p-3 relative z-40 relative backdrop-blur-md">
+          <div className="container mx-auto px-4 flex items-center justify-center gap-3">
+            <AlertTriangle className="text-brand-400 w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            <p className="text-xs sm:text-sm text-brand-200 font-bold tracking-wide text-center">
+              {settings.notice}
+            </p>
+          </div>
+        </div>
+      )}
       
       <Breadcrumbs />
       <ScrollToTop />
@@ -130,11 +170,13 @@ export default function App() {
     <ErrorBoundary>
       <HelmetProvider>
         <AuthProvider>
-          <NotificationProvider>
-            <Router>
-              <AppContent toasts={toasts} removeToast={removeToast} />
-            </Router>
-          </NotificationProvider>
+          <SiteSettingsProvider>
+            <NotificationProvider>
+              <Router>
+                <AppContent toasts={toasts} removeToast={removeToast} />
+              </Router>
+            </NotificationProvider>
+          </SiteSettingsProvider>
         </AuthProvider>
       </HelmetProvider>
     </ErrorBoundary>

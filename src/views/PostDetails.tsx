@@ -141,7 +141,7 @@ const PostDetails: React.FC = () => {
 
             <ConfirmModal
                 isOpen={showDeleteConfirm}
-                onClose={() => setShowDeleteConfirm(false)}
+                onCancel={() => setShowDeleteConfirm(false)}
                 onConfirm={handleDelete}
                 title="Delete Post"
                 message="Are you sure you want to delete this post? This action cannot be undone."

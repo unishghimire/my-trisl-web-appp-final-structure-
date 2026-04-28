@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Headset, Mail, Briefcase, MessageCircle, Facebook, Instagram, Music2, Building2, ExternalLink, CheckCircle2, FileText } from 'lucide-react';
+import { Headset, Mail, Briefcase, MessageCircle, Facebook, Instagram, Music2, Building2, ExternalLink, CheckCircle2, FileText, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
+import { useSiteSettings } from '../context/SiteSettingsContext';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const Contact: React.FC = () => {
     const { user, profile } = useAuth();
     const { showToast } = useNotification();
+    const { settings } = useSiteSettings();
     const [isApplying, setIsApplying] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     
@@ -106,154 +108,162 @@ const Contact: React.FC = () => {
             </div>
 
             {/* Organization Application Section */}
-            <div className="bg-gradient-to-br from-brand-900/20 to-dark p-8 rounded-2xl border border-brand-500/20 shadow-2xl relative overflow-hidden group">
-                <div className="absolute -right-20 -top-20 w-64 h-64 bg-brand-500/5 rounded-full blur-3xl group-hover:bg-brand-500/10 transition-all"></div>
-                
-                <div className="relative z-10">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                        <div className="space-y-2">
-                            <h2 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
-                                <Building2 className="text-brand-500 w-8 h-8" /> Become an Organizer
-                            </h2>
-                            <p className="text-gray-400 text-sm max-w-xl">Host your own tournaments, manage participants, and grow your gaming community with NexPlay's professional tools.</p>
-                        </div>
-                        <button 
-                            onClick={() => setIsApplying(!isApplying)}
-                            className={`px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-sm transition-all shadow-xl ${
-                                isApplying 
-                                ? 'bg-gray-800 text-gray-400 hover:text-white' 
-                                : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20'
-                            }`}
-                        >
-                            {isApplying ? 'Close Form' : 'Apply Now'}
-                        </button>
-                    </div>
-
-                    {isApplying ? (
-                        <form onSubmit={handleSubmit} className="bg-dark/50 p-8 rounded-3xl border border-gray-800 space-y-6 animate-slide-up">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">Full Name</label>
-                                    <input 
-                                        required
-                                        type="text" 
-                                        value={formData.name}
-                                        onChange={e => setFormData({...formData, name: e.target.value})}
-                                        className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
-                                        placeholder="Your legal name"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">Organization Name</label>
-                                    <input 
-                                        required
-                                        type="text" 
-                                        value={formData.orgName}
-                                        onChange={e => setFormData({...formData, orgName: e.target.value})}
-                                        className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
-                                        placeholder="e.g. Elite Gamers Nepal"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">WhatsApp Contact</label>
-                                    <input 
-                                        required
-                                        type="tel" 
-                                        value={formData.whatsapp}
-                                        onChange={e => setFormData({...formData, whatsapp: e.target.value})}
-                                        className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
-                                        placeholder="+977 98XXXXXXXX"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">Official Email</label>
-                                    <input 
-                                        required
-                                        type="email" 
-                                        value={formData.email}
-                                        onChange={e => setFormData({...formData, email: e.target.value})}
-                                        className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
-                                        placeholder="org@example.com"
-                                    />
-                                </div>
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1 flex items-center gap-2">
-                                        Tournament Proof (Google Drive Link) <ExternalLink className="w-3 h-3" />
-                                    </label>
-                                    <input 
-                                        required
-                                        type="url" 
-                                        value={formData.proofLink}
-                                        onChange={e => setFormData({...formData, proofLink: e.target.value})}
-                                        className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
-                                        placeholder="Link to screenshots/videos of past tournaments"
-                                    />
-                                </div>
+            {settings?.isOrgFormOpen ? (
+                <div className="bg-gradient-to-br from-brand-900/20 to-dark p-8 rounded-2xl border border-brand-500/20 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute -right-20 -top-20 w-64 h-64 bg-brand-500/5 rounded-full blur-3xl group-hover:bg-brand-500/10 transition-all"></div>
+                    
+                    <div className="relative z-10">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                            <div className="space-y-2">
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                    <Building2 className="text-brand-500 w-8 h-8" /> Become an Organizer
+                                </h2>
+                                <p className="text-gray-400 text-sm max-w-xl">Host your own tournaments, manage participants, and grow your gaming community with NexPlay's professional tools.</p>
                             </div>
-
-                            <div className="bg-brand-500/5 p-6 rounded-2xl border border-brand-500/10 space-y-4">
-                                <div className="flex items-start gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0">
-                                        <FileText className="w-5 h-5 text-brand-500" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="text-sm font-bold text-white uppercase tracking-wide">Contract Instructions</h4>
-                                        <p className="text-xs text-gray-400 leading-relaxed">
-                                            Please download the official partnership contract from the link below, fill it out, and email it to <span className="text-brand-400 font-bold">partnerships.nexplayorg@gmail.com</span> with the subject "ORG APPLICATION - [Your Org Name]".
-                                        </p>
-                                        <a href="#" className="inline-flex items-center gap-2 text-brand-500 hover:text-brand-400 text-[10px] font-black uppercase tracking-widest mt-2">
-                                            Download Contract Template <ExternalLink className="w-3 h-3" />
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 p-2">
-                                <input 
-                                    type="checkbox" 
-                                    id="agree" 
-                                    checked={formData.agreed}
-                                    onChange={e => setFormData({...formData, agreed: e.target.checked})}
-                                    className="w-5 h-5 rounded border-gray-800 bg-dark text-brand-500 focus:ring-brand-500 accent-brand-500 cursor-pointer"
-                                />
-                                <label htmlFor="agree" className="text-xs text-gray-400 cursor-pointer select-none">
-                                    I agree to NexPlay's Organizer Terms of Service and Privacy Policy.
-                                </label>
-                            </div>
-
                             <button 
-                                disabled={submitting}
-                                type="submit" 
-                                className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-5 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-brand-500/20 flex items-center justify-center gap-3"
+                                onClick={() => setIsApplying(!isApplying)}
+                                className={`px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-sm transition-all shadow-xl ${
+                                    isApplying 
+                                    ? 'bg-gray-800 text-gray-400 hover:text-white' 
+                                    : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20'
+                                }`}
                             >
-                                {submitting ? (
-                                    <>
-                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Submitting...
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle2 className="w-5 h-5" /> Submit Application
-                                    </>
-                                )}
+                                {isApplying ? 'Close Form' : 'Apply Now'}
                             </button>
-                        </form>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {[
-                                { title: 'Verified Badge', desc: 'Get a blue checkmark on your org profile.' },
-                                { title: 'Fee Management', desc: 'Set entry fees and automated prize pools.' },
-                                { title: 'Analytics', desc: 'Track participant growth and engagement.' }
-                            ].map((feature, i) => (
-                                <div key={i} className="bg-dark/30 p-5 rounded-2xl border border-gray-800/50">
-                                    <h4 className="text-white font-bold text-sm mb-1">{feature.title}</h4>
-                                    <p className="text-gray-500 text-xs">{feature.desc}</p>
-                                </div>
-                            ))}
                         </div>
-                    )}
+
+                        {isApplying ? (
+                            <form onSubmit={handleSubmit} className="bg-dark/50 p-8 rounded-3xl border border-gray-800 space-y-6 animate-slide-up">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">Full Name</label>
+                                        <input 
+                                            required
+                                            type="text" 
+                                            value={formData.name}
+                                            onChange={e => setFormData({...formData, name: e.target.value})}
+                                            className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
+                                            placeholder="Your legal name"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">Organization Name</label>
+                                        <input 
+                                            required
+                                            type="text" 
+                                            value={formData.orgName}
+                                            onChange={e => setFormData({...formData, orgName: e.target.value})}
+                                            className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
+                                            placeholder="e.g. Elite Gamers Nepal"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">WhatsApp Contact</label>
+                                        <input 
+                                            required
+                                            type="tel" 
+                                            value={formData.whatsapp}
+                                            onChange={e => setFormData({...formData, whatsapp: e.target.value})}
+                                            className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
+                                            placeholder="+977 98XXXXXXXX"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1">Official Email</label>
+                                        <input 
+                                            required
+                                            type="email" 
+                                            value={formData.email}
+                                            onChange={e => setFormData({...formData, email: e.target.value})}
+                                            className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
+                                            placeholder="org@example.com"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-2">
+                                        <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest ml-1 flex items-center gap-2">
+                                            Tournament Proof (Google Drive Link) <ExternalLink className="w-3 h-3" />
+                                        </label>
+                                        <input 
+                                            required
+                                            type="url" 
+                                            value={formData.proofLink}
+                                            onChange={e => setFormData({...formData, proofLink: e.target.value})}
+                                            className="w-full bg-dark border border-gray-800 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition-all"
+                                            placeholder="Link to screenshots/videos of past tournaments"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="bg-brand-500/5 p-6 rounded-2xl border border-brand-500/10 space-y-4">
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0">
+                                            <FileText className="w-5 h-5 text-brand-500" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <h4 className="text-sm font-bold text-white uppercase tracking-wide">Contract Instructions</h4>
+                                            <p className="text-xs text-gray-400 leading-relaxed">
+                                                Please download the official partnership contract from the link below, fill it out, and email it to <span className="text-brand-400 font-bold">partnerships.nexplayorg@gmail.com</span> with the subject "ORG APPLICATION - [Your Org Name]".
+                                            </p>
+                                            <a href="#" className="inline-flex items-center gap-2 text-brand-500 hover:text-brand-400 text-[10px] font-black uppercase tracking-widest mt-2">
+                                                Download Contract Template <ExternalLink className="w-3 h-3" />
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 p-2">
+                                    <input 
+                                        type="checkbox" 
+                                        id="agree" 
+                                        checked={formData.agreed}
+                                        onChange={e => setFormData({...formData, agreed: e.target.checked})}
+                                        className="w-5 h-5 rounded border-gray-800 bg-dark text-brand-500 focus:ring-brand-500 accent-brand-500 cursor-pointer"
+                                    />
+                                    <label htmlFor="agree" className="text-xs text-gray-400 cursor-pointer select-none">
+                                        I agree to NexPlay's Organizer Terms of Service and Privacy Policy.
+                                    </label>
+                                </div>
+
+                                <button 
+                                    disabled={submitting}
+                                    type="submit" 
+                                    className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-5 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-brand-500/20 flex items-center justify-center gap-3"
+                                >
+                                    {submitting ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle2 className="w-5 h-5" /> Submit Application
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {[
+                                    { title: 'Verified Badge', desc: 'Get a blue checkmark on your org profile.' },
+                                    { title: 'Fee Management', desc: 'Set entry fees and automated prize pools.' },
+                                    { title: 'Analytics', desc: 'Track participant growth and engagement.' }
+                                ].map((feature, i) => (
+                                    <div key={i} className="bg-dark/30 p-5 rounded-2xl border border-gray-800/50">
+                                        <h4 className="text-white font-bold text-sm mb-1">{feature.title}</h4>
+                                        <p className="text-gray-500 text-xs">{feature.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <div className="bg-dark/50 p-8 rounded-2xl border border-gray-800 text-center">
+                    <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-bold text-white uppercase tracking-widest mb-2">Applications Closed</h3>
+                    <p className="text-gray-400 text-sm max-w-md mx-auto">We are not accepting organizer applications at this time. Please check back later.</p>
+                </div>
+            )}
         </div>
     );
 };
