@@ -174,7 +174,7 @@ const HotPromotionsSlider: React.FC<HotPromotionsSliderProps> = ({ slides }) => 
                                     )}
                                     
                                     <button 
-                                        onClick={() => navigate(slide.link)}
+                                        onClick={() => navigate(slide.status === 'COMPLETED' ? `${slide.link}?tab=results` : slide.link)}
                                         aria-label={slide.status === 'COMPLETED' ? 'View Results' : 'Join Now'}
                                         className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
                                             slide.status === 'COMPLETED' 

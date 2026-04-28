@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PrizeDistributionInput from './PrizeDistributionInput';
+import { formatCurrency } from '../utils';
 
 interface TournamentCreateModalProps {
   isOpen: boolean;
@@ -82,7 +83,7 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
 
   useEffect(() => {
     const fetchGames = async () => {
-      const snap = await getDocs(collection(db, 'games'));
+      const snap = await getDocs(query(collection(db, 'games'), where('isPublished', '==', true)));
       setGames(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     };
     fetchGames();
@@ -580,11 +581,11 @@ const TournamentCreateModal: React.FC<TournamentCreateModalProps> = ({ isOpen, o
                 <div className="space-y-3">
                   <div>
                     <p className="text-[10px] text-gray-500 font-bold uppercase">Prize Pool</p>
-                    <p className="text-sm text-brand-400 font-black">₹{formData.prizePool.toLocaleString()}</p>
+                    <p className="text-sm text-brand-400 font-black">{formatCurrency(formData.prizePool)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-gray-500 font-bold uppercase">Entry Fee</p>
-                    <p className="text-sm text-white font-black">{formData.entryFee === 0 ? 'FREE' : `₹${formData.entryFee}`}</p>
+                    <p className="text-sm text-white font-black">{formData.entryFee === 0 ? 'FREE' : formatCurrency(formData.entryFee)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-gray-500 font-bold uppercase">Slots</p>

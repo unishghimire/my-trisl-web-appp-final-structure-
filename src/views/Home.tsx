@@ -57,28 +57,38 @@ const Home: React.FC = () => {
 
     useEffect(() => {
         const fetchData = async () => {
+            // Fetch active slides
             try {
-                // Fetch active slides
                 const slidesSnap = await getDocs(query(
                     collection(db, 'slides'),
-                    where('isActive', '==', true),
-                    orderBy('createdAt', 'desc'),
-                    limit(5)
+                    where('isActive', '==', true)
                 ));
-                const slidesData = slidesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Slide));
-                setSlides(slidesData);
+                let slidesData = slidesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Slide));
+                slidesData.sort((a, b) => {
+                    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                    return bTime - aTime;
+                });
+                setSlides(slidesData.slice(0, 5));
+            } catch (error) {
+                console.warn("Could not fetch slides:", error);
+            }
 
-                // Fetch featured tournaments
+            // Fetch featured tournaments
+            try {
                 const tournamentsSnap = await getDocs(query(
                     collection(db, 'tournaments'),
-                    where('isFeatured', '==', true),
-                    where('status', '==', 'upcoming'),
-                    limit(6)
+                    where('isFeatured', '==', true)
                 ));
-                const tournamentsData = tournamentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tournament));
-                setFeaturedTournaments(tournamentsData);
+                let tournamentsData = tournamentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tournament));
+                tournamentsData = tournamentsData.filter(t => t.status === 'upcoming');
+                setFeaturedTournaments(tournamentsData.slice(0, 6));
+            } catch (error) {
+                console.warn("Could not fetch tournaments:", error);
+            }
 
-                // Fetch popular games
+            // Fetch popular games
+            try {
                 const gamesSnap = await getDocs(query(
                     collection(db, 'games'),
                     where('isPublished', '==', true),
@@ -87,10 +97,10 @@ const Home: React.FC = () => {
                 const gamesData = gamesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
                 setPopularGames(gamesData);
             } catch (error) {
-                console.error("Error fetching home data:", error);
-            } finally {
-                setLoading(false);
+                console.warn("Could not fetch games:", error);
             }
+
+            setLoading(false);
         };
 
         fetchData();

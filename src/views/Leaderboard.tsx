@@ -6,6 +6,7 @@ import { Trophy, Users, ArrowUp, ArrowDown, Minus, Star, Search, Filter, Chevron
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatCurrency } from '../utils';
 
 const RankIndicator = ({ change }: { change?: number }) => {
     if (change === undefined || change === 0) return <Minus className="w-3 h-3 text-gray-600" />;
@@ -73,7 +74,7 @@ const PodiumCard = ({ item, rank, type, navigate }: { item: any, rank: number, t
                     <RankIndicator change={item.rankChange} />
                 </div>
                 <div className="bg-white/10 px-4 py-1.5 rounded-full">
-                    <span className="text-brand-400 font-black">NPR {item.totalEarnings?.toLocaleString() || 0}</span>
+                    <span className="text-brand-400 font-black">{formatCurrency(item.totalEarnings, 'NPR ')}</span>
                 </div>
             </div>
         </motion.div>
@@ -276,7 +277,7 @@ const Leaderboard: React.FC = () => {
                                     <div className="flex items-center gap-8">
                                         <div className="text-right hidden sm:block">
                                             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Earnings</p>
-                                            <p className="font-black text-white">NPR {item.totalEarnings?.toLocaleString() || 0}</p>
+                                            <p className="font-black text-white">{formatCurrency(item.totalEarnings, 'NPR ')}</p>
                                         </div>
                                         <ChevronRight className="w-5 h-5 text-gray-700 group-hover:text-brand-500 transition" />
                                     </div>

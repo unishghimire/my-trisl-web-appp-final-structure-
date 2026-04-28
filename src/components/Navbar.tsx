@@ -39,12 +39,10 @@ const Navbar: React.FC = () => {
 
     const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
     const toggleNotifications = () => {
-        console.log('Toggling notifications, current state:', isNotificationsOpen);
         setIsNotificationsOpen(!isNotificationsOpen);
     };
 
     const handleNotificationClick = async (n: Notification) => {
-        console.log('Notification clicked:', n);
         await NotificationService.markAsRead(n.id);
         if (n.link) navigate(n.link);
         setIsNotificationsOpen(false);
@@ -73,22 +71,22 @@ const Navbar: React.FC = () => {
     const isActive = (path: string) => location.pathname === path;
 
     return (
-        <nav className="sticky top-0 z-50 bg-dark/80 backdrop-blur-md border-b border-gray-800">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16">
+        <nav className="sticky top-0 z-50 bg-dark/80 backdrop-blur-md border-b border-gray-800 transition-all duration-200">
+            <div className="container mx-auto px-4 sm:px-6">
+                <div className="flex items-center justify-between h-16 sm:h-20 max-w-full">
                     {/* Left Section: Logo */}
-                    <div className="flex items-center cursor-pointer group" onClick={() => navigate('/')}>
-                        <img src="https://github.com/unishghimire/nexplay-logo/blob/main/nexplay.jpg?raw=true" alt="Nexplay Logo" className="w-8 h-8 sm:w-9 sm:h-9 rounded-md mr-2" />
-                        <span className="text-lg sm:text-xl font-bold tracking-wider text-white">NEX<span className="text-brand-500">PLAY</span></span>
-                    </div>
+                    <Link to="/" className="flex items-center gap-2 sm:gap-3 shrink-0 group">
+                        <img src="https://github.com/unishghimire/nexplay-logo/blob/main/nexplay.jpg?raw=true" alt="Nexplay Logo" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow-md group-hover:scale-105 transition-transform" />
+                        <span className="text-lg sm:text-2xl font-black tracking-widest text-white leading-none">NEX<span className="text-brand-500">PLAY</span></span>
+                    </Link>
 
-                    {/* Center Section: Navigation */}
-                    <div className="hidden lg:flex items-center space-x-1">
+                    {/* Center Section: Navigation (Desktop) */}
+                    <div className="hidden lg:flex items-center gap-1 mx-4">
                         {navLinks.map((link) => (
                             <Link 
                                 key={link.path} 
                                 to={link.path} 
-                                className={`px-3 py-2 rounded-md text-sm font-medium transition flex items-center ${isActive(link.path) ? 'text-white border-b-2 border-brand-500' : 'text-gray-300 hover:text-white'}`}
+                                className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 flex items-center ${isActive(link.path) ? 'bg-brand-500/10 text-brand-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                             >
                                 {link.name}
                             </Link>
@@ -96,133 +94,123 @@ const Navbar: React.FC = () => {
                     </div>
 
                     {/* Right Section: Profile, Wallet, Notifications */}
-                    <div className="hidden lg:flex items-center gap-4">
+                    <div className="flex items-center justify-end gap-2 sm:gap-4 shrink-0">
                         {user ? (
                             <>
                                 <div className="relative">
-                                    <button onClick={toggleNotifications} className="text-gray-400 hover:text-white transition relative p-2">
-                                        <Bell className="w-5 h-5" />
+                                    <button onClick={toggleNotifications} className="text-gray-400 hover:text-white transition-colors relative w-10 h-10 rounded-full hover:bg-white/5 flex items-center justify-center shrink-0">
+                                        <Bell className="w-5 h-5" aria-hidden="true" />
                                         {unreadCount > 0 && (
-                                            <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
-                                                {unreadCount}
+                                            <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center border-2 border-dark" aria-label={`${unreadCount} unread notifications`}>
+                                                {unreadCount > 9 ? '9+' : unreadCount}
                                             </span>
                                         )}
                                     </button>
                                     {isNotificationsOpen && (
-                                    <div className="absolute right-0 mt-2 w-80 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-[60]">
-                                        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
-                                                <h4 className="text-sm font-bold text-white">Notifications</h4>
-                                                <button onClick={handleMarkAllRead} className="text-[10px] text-brand-400 hover:underline">Mark all as read</button>
+                                        <div className="absolute right-0 mt-2 w-80 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-[60]">
+                                            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+                                                <h4 className="text-sm font-black tracking-wider uppercase text-white">Notifications</h4>
+                                                <button onClick={handleMarkAllRead} className="text-[10px] uppercase font-bold tracking-widest text-brand-400 hover:text-brand-300 transition-colors">Mark all as read</button>
                                             </div>
-                                            <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                                            <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
                                                 {notifications.length > 0 ? (
                                                     notifications.map(n => (
                                                         <div 
                                                             key={n.id} 
                                                             onClick={() => handleNotificationClick(n)}
-                                                            className={`p-4 border-b border-gray-800 cursor-pointer hover:bg-surface transition ${!n.read ? 'bg-brand-900/10' : ''}`}
+                                                            className={`p-4 border-b border-gray-800/50 cursor-pointer hover:bg-white/5 transition-colors ${!n.read ? 'bg-brand-900/5' : ''}`}
                                                         >
-                                                            <div className="flex justify-between items-start mb-1">
-                                                                <span className={`text-xs font-bold ${n.type === 'alert' ? 'text-red-400' : n.type === 'success' ? 'text-green-400' : 'text-brand-400'}`}>{n.title}</span>
-                                                                {!n.read && <span className="w-2 h-2 bg-brand-500 rounded-full"></span>}
+                                                            <div className="flex justify-between items-start mb-1 gap-2">
+                                                                <span className={`text-xs font-bold leading-tight ${n.type === 'alert' ? 'text-red-400' : n.type === 'success' ? 'text-green-400' : 'text-brand-400'}`}>{n.title}</span>
+                                                                {!n.read && <span className="w-2 h-2 bg-brand-500 rounded-full shrink-0 mt-0.5"></span>}
                                                             </div>
-                                                            <p className="text-xs text-gray-400 line-clamp-2">{n.message}</p>
+                                                            <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{n.message}</p>
                                                         </div>
                                                     ))
                                                 ) : (
-                                                    <div className="p-8 text-center text-gray-500 text-sm">No notifications</div>
+                                                    <div className="p-8 text-center text-gray-500 text-sm font-medium">No notifications</div>
                                                 )}
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                                <WalletDisplay balance={profile?.balance || 0} onClick={() => navigate('/wallet')} />
-                                <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />
+                                <div className="hidden sm:block">
+                                    <WalletDisplay balance={profile?.balance || 0} onClick={() => navigate('/wallet')} />
+                                </div>
+                                <div className="hidden sm:block">
+                                    <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />
+                                </div>
                             </>
                         ) : (
-                            <button onClick={() => navigate('/login')} className="bg-brand-600 hover:bg-brand-500 text-white px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-brand-600/20">LOGIN</button>
-                        )}
-                    </div>
-
-                    {/* Mobile Menu Toggle */}
-                    <div className="lg:hidden flex items-center gap-1">
-                        {user && (
-                            <div className="relative mr-1">
-                                <button onClick={toggleNotifications} className="text-gray-400 hover:text-white transition relative p-2">
-                                    <Bell className="w-5 h-5" />
-                                    {unreadCount > 0 && (
-                                        <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
-                                            {unreadCount}
-                                        </span>
-                                    )}
-                                </button>
-                                {isNotificationsOpen && (
-                                    <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-[60]">
-                                        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
-                                            <h4 className="text-sm font-bold text-white">Notifications</h4>
-                                            <button onClick={handleMarkAllRead} className="text-[10px] text-brand-400 hover:underline">Mark all as read</button>
-                                        </div>
-                                        <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                                            {notifications.length > 0 ? (
-                                                notifications.map(n => (
-                                                    <div 
-                                                        key={n.id} 
-                                                        onClick={() => handleNotificationClick(n)}
-                                                        className={`p-4 border-b border-gray-800 cursor-pointer hover:bg-surface transition ${!n.read ? 'bg-brand-900/10' : ''}`}
-                                                    >
-                                                        <div className="flex justify-between items-start mb-1">
-                                                            <span className={`text-xs font-bold ${n.type === 'alert' ? 'text-red-400' : n.type === 'success' ? 'text-green-400' : 'text-brand-400'}`}>{n.title}</span>
-                                                            {!n.read && <span className="w-2 h-2 bg-brand-500 rounded-full"></span>}
-                                                        </div>
-                                                        <p className="text-xs text-gray-400 line-clamp-2">{n.message}</p>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className="p-8 text-center text-gray-500 text-sm">No notifications</div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
+                            <div className="hidden sm:block">
+                                <Link to="/login" className="bg-brand-500 hover:bg-brand-600 text-white h-10 px-6 flex items-center justify-center rounded-full font-black tracking-widest text-sm transition-all shadow-lg hover:shadow-brand-500/25 whitespace-nowrap shrink-0">
+                                    LOGIN
+                                </Link>
                             </div>
                         )}
-                        {user && <WalletDisplay balance={profile?.balance || 0} onClick={() => navigate('/wallet')} />}
-                        {user && <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />}
-                        <button onClick={toggleMobileMenu} className="text-gray-400 hover:text-white p-1 rounded-md focus:outline-none">
-                            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+
+                        {/* Hamburger icon for smaller screens */}
+                        <button 
+                            onClick={toggleMobileMenu} 
+                            aria-label="Toggle mobile menu" 
+                            aria-expanded={isMobileMenuOpen} 
+                            className="lg:hidden text-gray-400 hover:text-white w-10 h-10 rounded-full hover:bg-white/5 transition-colors flex items-center justify-center focus:outline-none ml-1 shrink-0"
+                        >
+                            {isMobileMenuOpen ? <X className="w-6 h-6" aria-hidden="true" /> : <Menu className="w-6 h-6" aria-hidden="true" />}
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* Mobile Menu */}
-            {isMobileMenuOpen && (
-                <div className="lg:hidden bg-dark border-b border-gray-800 animate-fade-in">
-                    <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+            {/* Mobile Menu (now covers all screens below lg) */}
+            <div className={`lg:hidden absolute top-full left-0 w-full overflow-y-auto transition-all duration-300 ease-in-out bg-dark/95 backdrop-blur-xl border-b border-gray-800 ${isMobileMenuOpen ? 'max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-5rem)] opacity-100 border-t border-gray-800/50' : 'max-h-0 opacity-0 pointer-events-none border-t-0'}`}>
+                <div className="px-4 py-4 space-y-2">
+                    {user && (
+                        <div className="flex sm:hidden items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-800">
+                            <ProfileDropdown username={profile?.username || 'User'} avatarUrl={profile?.profilePicUrl} onLogout={handleLogout} />
+                            <WalletDisplay balance={profile?.balance || 0} onClick={() => navigate('/wallet')} />
+                        </div>
+                    )}
+                    
+                    <div className="space-y-1">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-4 mb-2">Navigation</div>
                         {navLinks.map((link) => (
-                            <Link key={link.path} to={link.path} onClick={toggleMobileMenu} className={`block px-3 py-3 border-b border-gray-800 text-base font-medium ${isActive(link.path) ? 'text-white bg-brand-900/20' : 'text-gray-300 hover:text-white'}`}>
+                            <Link 
+                                key={link.path} 
+                                to={link.path} 
+                                onClick={() => setIsMobileMenuOpen(false)} 
+                                className={`block px-4 py-3 rounded-xl text-sm font-bold transition-colors ${isActive(link.path) ? 'text-brand-400 bg-brand-500/10' : 'text-gray-300 hover:text-white hover:bg-white/5'}`}
+                            >
                                 {link.name}
                             </Link>
                         ))}
-                        {user ? (
-                            <>
-                                <Link to="/dashboard" onClick={toggleMobileMenu} className="block px-3 py-3 border-b border-gray-800 text-gray-300">
-                                    Dashboard
-                                </Link>
-                                <Link to="/profile" onClick={toggleMobileMenu} className="block px-3 py-3 border-b border-gray-800 text-gray-300">
-                                    My Profile
-                                </Link>
-                                <button onClick={() => { handleLogout(); toggleMobileMenu(); }} className="block w-full text-left px-3 py-3 text-red-400 font-bold">
-                                    Logout
-                                </button>
-                            </>
-                        ) : (
-                            <Link to="/login" onClick={toggleMobileMenu} className="block px-3 py-3 text-brand-400 font-bold mt-2">
+                    </div>
+
+                    {user ? (
+                        <div className="pt-4 mt-4 border-t border-gray-800 space-y-1">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-4 mb-2">Account</div>
+                            <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-3 rounded-xl text-sm font-bold text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                                Dashboard
+                            </Link>
+                            <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-3 rounded-xl text-sm font-bold text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                                My Profile
+                            </Link>
+                            <Link to="/wallet" onClick={() => setIsMobileMenuOpen(false)} className="block sm:hidden px-4 py-3 rounded-xl text-sm font-bold text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                                My Wallet
+                            </Link>
+                            <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="block w-full text-left px-4 py-3 rounded-xl text-sm font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors mt-2">
+                                Sign Out
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="pt-4 mt-4 border-t border-gray-800 sm:hidden">
+                            <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center justify-center w-full bg-brand-500 hover:bg-brand-600 text-white px-6 py-3 rounded-full font-black tracking-widest text-sm transition-all shadow-lg hover:shadow-brand-500/25">
                                 LOGIN / SIGN UP
                             </Link>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </nav>
     );
 };

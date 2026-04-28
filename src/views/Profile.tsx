@@ -121,12 +121,16 @@ const Profile: React.FC = () => {
                 try {
                     const q = query(
                         collection(db, 'transactions'),
-                        where('userId', '==', user.uid),
-                        orderBy('timestamp', 'desc'),
-                        limit(10)
+                        where('userId', '==', user.uid)
                     );
                     const snap = await getDocs(q);
-                    setRecentActivity(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
+                    let txs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+                    txs.sort((a,b) => {
+                        const aTime = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+                        const bTime = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+                        return bTime - aTime;
+                    });
+                    setRecentActivity(txs.slice(0, 10));
                 } catch (error) {
                     console.error("Error fetching activity:", error);
                 } finally {
@@ -527,7 +531,7 @@ const Profile: React.FC = () => {
                                         </div>
                                         <div className="text-right">
                                             <div className={`text-sm font-black ${item.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                {item.amount > 0 ? '+' : ''}{formatCurrency(Math.abs(item.amount))}
+                                                {item.amount > 0 ? '+' : ''}{formatCurrency(item.amount)}
                                             </div>
                                             <div className="text-[10px] text-gray-600 uppercase font-bold">{item.status}</div>
                                         </div>
@@ -590,11 +594,12 @@ const Profile: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                    <label htmlFor="profileInGameId" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                         <Hash className="w-3 h-3" /> In-Game ID (UID) * {isUidLocked && <span className="text-brand-500 font-normal">(Locked)</span>}
                                     </label>
                                     <input 
-                                        type="text" 
+                                        id="profileInGameId"
+                                        type="text"
                                         value={inGameId} 
                                         onChange={(e) => setInGameId(e.target.value)}
                                         placeholder="e.g. 512345678" 
@@ -603,11 +608,12 @@ const Profile: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                    <label htmlFor="profileInGameName" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                         <User className="w-3 h-3" /> In-Game Name
                                     </label>
                                     <input 
-                                        type="text" 
+                                        id="profileInGameName"
+                                        type="text"
                                         value={inGameName} 
                                         onChange={(e) => setInGameName(e.target.value)}
                                         placeholder="Enter In-Game Name" 
@@ -615,11 +621,12 @@ const Profile: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                    <label htmlFor="profileTeamName" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                         <Users className="w-3 h-3" /> Team Name
                                     </label>
                                     <input 
-                                        type="text" 
+                                        id="profileTeamName"
+                                        type="text"
                                         value={teamName} 
                                         onChange={(e) => setTeamName(e.target.value)}
                                         placeholder="Enter Team Name" 
@@ -629,48 +636,52 @@ const Profile: React.FC = () => {
                                 {profile?.role === 'organizer' && (
                                     <>
                                         <div>
-                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                            <label htmlFor="profileOrgName" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                                 <Briefcase className="w-3 h-3" /> Organization Name
                                             </label>
                                             <input 
-                                                type="text" 
-                                                value={orgName} 
+                                                id="profileOrgName"
+                                                type="text"
+                                        value={orgName} 
                                                 onChange={(e) => setOrgName(e.target.value)}
                                                 placeholder="Enter Org Name" 
                                                 className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                            <label htmlFor="profileOrgName" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                                 <Phone className="w-3 h-3" /> WhatsApp
                                             </label>
                                             <input 
-                                                type="text" 
-                                                value={orgWhatsapp} 
+                                                id="profileWhatsApp"
+                                                type="text"
+                                        value={orgWhatsapp} 
                                                 onChange={(e) => setOrgWhatsapp(e.target.value)}
                                                 placeholder="WhatsApp Number" 
                                                 className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                            <label htmlFor="profileWhatsApp" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                                 Discord
                                             </label>
                                             <input 
-                                                type="text" 
-                                                value={orgDiscord} 
+                                                id="profileDiscord"
+                                                type="text"
+                                        value={orgDiscord} 
                                                 onChange={(e) => setOrgDiscord(e.target.value)}
                                                 placeholder="Discord Username" 
                                                 className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                            <label htmlFor="profileYouTube" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                                 YouTube
                                             </label>
                                             <input 
-                                                type="text" 
-                                                value={orgYoutube} 
+                                                id="profileYouTube"
+                                                type="text"
+                                        value={orgYoutube} 
                                                 onChange={(e) => setOrgYoutube(e.target.value)}
                                                 placeholder="YouTube Channel Link" 
                                                 className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
@@ -679,11 +690,12 @@ const Profile: React.FC = () => {
                                     </>
                                 )}
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                    <label htmlFor="profilePhone" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                         <Phone className="w-3 h-3" /> Phone Number
                                     </label>
                                     <input 
-                                        type="tel" 
+                                        id="profilePhone"
+                                        type="tel"
                                         value={phone} 
                                         onChange={(e) => setPhone(e.target.value)}
                                         placeholder="e.g. 98XXXXXXXX"
@@ -694,7 +706,7 @@ const Profile: React.FC = () => {
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                    <label htmlFor="profileBio" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                         <Info className="w-3 h-3" /> Bio / Description
                                     </label>
                                     <textarea 
@@ -705,11 +717,12 @@ const Profile: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                    <label htmlFor="profileSkills" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                         <Briefcase className="w-3 h-3" /> Skills (Comma separated)
                                     </label>
                                     <input 
-                                        type="text" 
+                                        id="profileSkills"
+                                        type="text"
                                         value={skills} 
                                         onChange={(e) => setSkills(e.target.value)}
                                         placeholder="e.g. React, Node.js, UI/UX"
@@ -718,7 +731,7 @@ const Profile: React.FC = () => {
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                        <label htmlFor="profileStatus" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                             Status
                                         </label>
                                         <select 
@@ -733,12 +746,13 @@ const Profile: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
+                                        <label htmlFor="profileStatus" className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block flex items-center gap-1">
                                             Custom Activity
                                         </label>
                                         <input 
-                                            type="text" 
-                                            value={customActivity} 
+                                            id="profileCustomActivity"
+                                            type="text"
+                                        value={customActivity} 
                                             onChange={(e) => setCustomActivity(e.target.value)}
                                             placeholder="e.g. Coding..."
                                             className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition font-bold min-h-[44px]"
@@ -838,8 +852,9 @@ const Profile: React.FC = () => {
                                         <div>
                                             <label className="text-[10px] text-gray-500 uppercase font-black mb-1 block ml-1">Organization Name</label>
                                             <input 
-                                                type="text" 
-                                                value={orgName}
+                                                id="profileOrgName"
+                                                type="text"
+                                        value={orgName}
                                                 onChange={(e) => setOrgName(e.target.value)}
                                                 placeholder="Organization / Brand Name" 
                                                 className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 outline-none transition font-bold"
@@ -860,8 +875,9 @@ const Profile: React.FC = () => {
                                         <div>
                                             <label className="text-[10px] text-gray-500 uppercase font-black mb-1 block ml-1">WhatsApp Number</label>
                                             <input 
-                                                type="text" 
-                                                value={orgWhatsapp}
+                                                id="profileWhatsApp"
+                                                type="text"
+                                        value={orgWhatsapp}
                                                 onChange={(e) => setOrgWhatsapp(e.target.value)}
                                                 placeholder="+1234567890" 
                                                 className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 outline-none transition font-bold"

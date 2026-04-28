@@ -46,13 +46,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             try {
                 if (firebaseUser) {
                     const userRef = doc(db, 'users', firebaseUser.uid);
-                    const userSnap = await getDoc(userRef);
+                    let userSnap;
+                    try {
+                        userSnap = await getDoc(userRef);
+                    } catch (e) {
+                        console.error("[AUTH] Failed to getDoc userRef", e);
+                        throw e;
+                    }
                     
                     if (!userSnap.exists()) {
                         // Create user document if it doesn't exist (e.g., first Google Sign-In)
                         const newUser = {
                             uid: firebaseUser.uid,
-                            email: firebaseUser.email || '',
+                            email: firebaseUser.email || 'no-email@test.com',
                             username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
                             role: 'player',
                             balance: 0,
@@ -64,18 +70,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             isBanned: false,
                             createdAt: serverTimestamp(),
                         };
-                        await setDoc(userRef, newUser);
+                        try {
+                            await setDoc(userRef, newUser);
+                        } catch (e) {
+                            console.error("[AUTH] Failed to setDoc userRef", e);
+                            throw e;
+                        }
                         
                         // Create public profile
-                        await setDoc(doc(db, 'users_public', firebaseUser.uid), {
-                            uid: firebaseUser.uid,
-                            username: newUser.username,
-                            totalEarnings: 0,
-                            inGameId: '',
-                            inGameName: '',
-                            role: 'player',
-                            updatedAt: serverTimestamp(),
-                        });
+                        try {
+                            await setDoc(doc(db, 'users_public', firebaseUser.uid), {
+                                uid: firebaseUser.uid,
+                                username: newUser.username,
+                                totalEarnings: 0,
+                                inGameId: '',
+                                inGameName: '',
+                                role: 'player',
+                                updatedAt: serverTimestamp(),
+                            });
+                        } catch (e) {
+                            console.error("[AUTH] Failed to setDoc users_public", e);
+                            throw e;
+                        }
                         
                         setUser({ uid: newUser.uid, email: newUser.email, username: newUser.username, role: newUser.role });
                         setProfile(newUser as UserProfile);
@@ -89,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setProfile(null);
                 }
             } catch (error) {
-                console.error("Error in auth state change:", error);
+                console.error("Error in auth state change:", error, "failed during user check or creation", firebaseUser?.uid);
                 // If there's an error (e.g., permission denied), we should still stop loading
                 // and potentially clear the user state to prevent infinite loading
                 setUser(null);
@@ -113,6 +129,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         setUser(prev => prev ? { ...prev, role: snapshot.data().role } : null);
                     }
                 }
+            }, (error) => {
+                console.error("Error in user profile snapshot:", error);
             });
 
             // Presence Management

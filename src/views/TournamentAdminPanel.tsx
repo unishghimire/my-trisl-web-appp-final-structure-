@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
+import { formatCurrency } from '../utils';
 
 export default function TournamentAdminPanel() {
     const { id } = useParams();
@@ -486,22 +487,22 @@ export default function TournamentAdminPanel() {
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                                         <div>
                                             <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Total Entry Fees</p>
-                                            <p className="text-xl font-black text-white">₹{tournamentEarning.entryFeeTotal.toLocaleString()}</p>
+                                            <p className="text-xl font-black text-white">{formatCurrency(tournamentEarning.entryFeeTotal)}</p>
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Total Prize Pool</p>
-                                            <p className="text-xl font-black text-white">₹{tournamentEarning.prizePoolTotal.toLocaleString()}</p>
+                                            <p className="text-xl font-black text-white">{formatCurrency(tournamentEarning.prizePoolTotal)}</p>
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Net Profit</p>
                                             <p className={`text-xl font-black ${tournamentEarning.profit > 0 ? 'text-green-500' : 'text-red-500'} flex items-center gap-1`}>
                                                 {tournamentEarning.profit > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                                                ₹{tournamentEarning.profit.toLocaleString()}
+                                                {formatCurrency(tournamentEarning.profit)}
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Your Share (85%)</p>
-                                            <p className="text-xl font-black text-brand-400">₹{tournamentEarning.orgShare.toLocaleString()}</p>
+                                            <p className="text-xl font-black text-brand-400">{formatCurrency(tournamentEarning.orgShare)}</p>
                                             <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${
                                                 tournamentEarning.status === 'released' ? 'bg-green-500/10 text-green-500' :
                                                 tournamentEarning.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500' :

@@ -1,6 +1,25 @@
 import { Timestamp } from 'firebase/firestore';
 
-export const formatCurrency = (amount: number) => `Rs. ${parseFloat((amount || 0).toString()).toLocaleString('en-NP', { minimumFractionDigits: 0 })}`;
+export const formatCurrency = (amount: number | string, prefix: string = 'Rs. ') => {
+    const numAmount = Number(amount);
+    if (amount === null || amount === undefined || isNaN(numAmount)) return `${prefix}0`;
+
+    const absAmount = Math.abs(numAmount);
+    const sign = numAmount < 0 ? '-' : '';
+
+    let formattedValue = '';
+    if (absAmount >= 1_000_000_000) {
+        formattedValue = (Math.trunc(absAmount / 100_000_000) / 10).toString() + 'B';
+    } else if (absAmount >= 1_000_000) {
+        formattedValue = (Math.trunc(absAmount / 100_000) / 10).toString() + 'M';
+    } else if (absAmount >= 1_000) {
+        formattedValue = (Math.trunc(absAmount / 100) / 10).toString() + 'K';
+    } else {
+        formattedValue = absAmount.toLocaleString('en-US', { maximumFractionDigits: 1 });
+    }
+
+    return `${sign}${prefix}${formattedValue}`;
+};
 
 export const formatDate = (ts: any) => {
     if (!ts) return 'N/A';

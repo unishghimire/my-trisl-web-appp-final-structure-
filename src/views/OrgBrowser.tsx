@@ -25,14 +25,9 @@ const OrgBrowser: React.FC = () => {
             const q = query(collection(db, 'users_public'));
             const snap = await getDocs(q);
             const data = snap.docs.map(d => ({ uid: d.id, ...(d.data() as any) }));
-            console.log("Fetched all users from users_public:", data);
-            
             const roles = Array.from(new Set(data.map((d: any) => d.role)));
-            console.log("Roles found in users_public:", roles);
-
             // Filter by role client-side for debugging
             const orgsData = data.filter((d: any) => d.role === 'organizer');
-            console.log("Filtered orgs:", orgsData);
             setOrgs(orgsData);
         } catch (error) {
             console.error("Error fetching orgs:", error);

@@ -7,6 +7,7 @@ import { Mail, Lock, User, Eye, EyeOff, ArrowRight, CheckCircle, XCircle, Shield
 import { createUserWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const Register: React.FC = () => {
     const [username, setUsername] = useState('');
@@ -21,6 +22,7 @@ const Register: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const [error, setError] = useState('');
+    const [captchaValue, setCaptchaValue] = useState<string | null>(null);
 
     const [passwordStrength, setPasswordStrength] = useState(0);
     const [passwordFeedback, setPasswordFeedback] = useState<string[]>([]);
@@ -64,6 +66,11 @@ const Register: React.FC = () => {
 
         if (!agreeTerms) {
             setError('You must agree to the Terms & Conditions');
+            return;
+        }
+
+        if (!captchaValue) {
+            setError('Please complete the CAPTCHA');
             return;
         }
 
@@ -156,7 +163,7 @@ const Register: React.FC = () => {
                     
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Username</label>
+                            <label htmlFor="username" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Username</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <User className="w-5 h-5" />
@@ -173,7 +180,7 @@ const Register: React.FC = () => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Email Address</label>
+                            <label htmlFor="email" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Email Address</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <Mail className="w-5 h-5" />
@@ -190,7 +197,7 @@ const Register: React.FC = () => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">In-Game ID (UID)</label>
+                            <label htmlFor="inGameId" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">In-Game ID (UID)</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <Hash className="w-5 h-5" />
@@ -207,7 +214,7 @@ const Register: React.FC = () => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">In-Game Name</label>
+                            <label htmlFor="inGameName" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">In-Game Name</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <User className="w-5 h-5" />
@@ -224,7 +231,7 @@ const Register: React.FC = () => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Phone Number</label>
+                            <label htmlFor="phone" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Phone Number</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <Phone className="w-5 h-5" />
@@ -241,7 +248,7 @@ const Register: React.FC = () => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Password</label>
+                            <label htmlFor="password" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Password</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <Lock className="w-5 h-5" />
@@ -295,7 +302,7 @@ const Register: React.FC = () => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Confirm Password</label>
+                            <label htmlFor="confirmPassword" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Confirm Password</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <Lock className="w-5 h-5" />
@@ -333,6 +340,14 @@ const Register: React.FC = () => {
                                 {error}
                             </motion.div>
                         )}
+
+                        <div className="flex justify-center">
+                            <ReCAPTCHA
+                                sitekey="6Lf6GM4sAAAAABv_kkiZqpuye93hutjtXLs9yyFX"
+                                onChange={(val) => setCaptchaValue(val)}
+                                theme="dark"
+                            />
+                        </div>
 
                         <button
                             type="submit"

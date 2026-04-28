@@ -18,10 +18,16 @@ const GamesBrowser: React.FC = () => {
             try {
                 const q = query(
                     collection(db, 'games'), 
-                    orderBy('createdAt', 'desc')
+                    where('isPublished', '==', true)
                 );
                 const snap = await getDocs(q);
-                setGames(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game)));
+                let gamesData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+                gamesData.sort((a,b) => {
+                    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                    return bTime - aTime;
+                });
+                setGames(gamesData);
             } catch (error) {
                 console.error("Error fetching games:", error);
             } finally {

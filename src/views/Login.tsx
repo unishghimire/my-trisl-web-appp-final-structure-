@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from 'lucide-react';
 import { signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -14,6 +15,7 @@ const Login: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const [error, setError] = useState('');
+    const [captchaValue, setCaptchaValue] = useState<string | null>(null);
 
     const { showToast } = useNotification();
     const navigate = useNavigate();
@@ -21,6 +23,12 @@ const Login: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        if (!captchaValue) {
+            setError('Please complete the CAPTCHA');
+            return;
+        }
+
         setIsLoading(true);
 
         try {
@@ -88,12 +96,13 @@ const Login: React.FC = () => {
                     
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Email Address</label>
+                            <label htmlFor="email" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Email Address</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-brand-500 transition">
                                     <Mail className="w-5 h-5" />
                                 </div>
                                 <input
+                                    id="email"
                                     type="email"
                                     required
                                     value={email}
@@ -106,7 +115,7 @@ const Login: React.FC = () => {
 
                         <div>
                             <div className="flex justify-between items-center mb-2 ml-1">
-                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">Password</label>
+                                <label htmlFor="password" className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">Password</label>
                                 <button 
                                     type="button"
                                     onClick={handleForgotPassword}
@@ -120,6 +129,7 @@ const Login: React.FC = () => {
                                     <Lock className="w-5 h-5" />
                                 </div>
                                 <input
+                                    id="password"
                                     type={showPassword ? "text" : "password"}
                                     required
                                     value={password}
@@ -146,6 +156,14 @@ const Login: React.FC = () => {
                                 {error}
                             </motion.div>
                         )}
+
+                        <div className="flex justify-center">
+                            <ReCAPTCHA
+                                sitekey="6Lf6GM4sAAAAABv_kkiZqpuye93hutjtXLs9yyFX"
+                                onChange={(val) => setCaptchaValue(val)}
+                                theme="dark"
+                            />
+                        </div>
 
                         <button
                             type="submit"

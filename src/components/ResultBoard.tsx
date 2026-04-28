@@ -148,6 +148,24 @@ export default function ResultBoard({ results, config }: ResultBoardProps) {
         );
     }
 
-    // Default fallback
-    return <div className="text-white">Template preview not implemented for {config.template}</div>;
+    // Default fallback or 'custom'
+    return (
+        <div className="bg-dark-900 p-6 rounded-2xl border border-gray-800">
+            <h3 className="text-white font-black mb-4 uppercase tracking-widest text-sm">Results</h3>
+            <div className="space-y-2">
+                {sortedResults.map((res) => (
+                    <div key={res.id} className="flex justify-between p-3 border-b border-gray-800 last:border-0 hover:bg-white/5 transition-colors">
+                        <div className="flex gap-4">
+                            {config.showFields.rank && <span className="font-mono text-gray-500 w-6">#{res.rank}</span>}
+                            {config.showFields.team && <span className="text-white font-bold">{res.team}</span>}
+                        </div>
+                        <div className="flex gap-4 text-right">
+                            {config.showFields.score && <span style={{ color: config.theme.primaryColor }} className="font-mono font-bold">{res.score} pts</span>}
+                            {config.showFields.status && <span className="text-xs uppercase bg-dark-800 px-2 py-1 rounded text-gray-400">{res.status}</span>}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 }

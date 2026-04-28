@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Trophy, Medal, Award } from 'lucide-react';
 import { PrizeDistribution } from '../types';
+import { formatCurrency } from '../utils';
 
 interface PrizeBoardProps {
     prizes: PrizeDistribution[];
@@ -58,7 +59,7 @@ export default function PrizeBoard({ prizes, currency = 'NPR', totalPrizePool }:
                 {totalPrizePool !== undefined && totalPrizePool > 0 && (
                     <div className="text-right">
                         <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Total Pool</p>
-                        <p className="text-lg font-black text-brand-400">{symbol} {totalPrizePool.toLocaleString()}</p>
+                        <p className="text-lg font-black text-brand-400">{formatCurrency(totalPrizePool, symbol + ' ')}</p>
                     </div>
                 )}
             </div>
@@ -88,7 +89,7 @@ export default function PrizeBoard({ prizes, currency = 'NPR', totalPrizePool }:
                         
                         <div className="text-right">
                             <p className={`text-xl font-black tracking-tight ${prize.rank === 1 ? 'text-yellow-400' : 'text-white'}`}>
-                                {symbol} {prize.amount.toLocaleString()}
+                                {formatCurrency(prize.amount, symbol + ' ')}
                             </p>
                         </div>
                     </motion.div>

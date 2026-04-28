@@ -7,6 +7,7 @@ import { formatCurrency, timeAgo } from '../utils';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Eye, Upload, BarChart, User, Shield, AlertTriangle, Users } from 'lucide-react';
 import ResultUploadModal from '../components/ResultUploadModal';
+import TournamentResultModal from '../components/TournamentResultModal';
 import { Team } from '../types';
 
 const Dashboard: React.FC = () => {
@@ -17,6 +18,7 @@ const Dashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+    const [viewResultTournament, setViewResultTournament] = useState<Tournament | null>(null);
     const navigate = useNavigate();
 
     const fetchAllData = async () => {
@@ -25,12 +27,17 @@ const Dashboard: React.FC = () => {
             // Fetch Joined Tournaments
             const partSnap = await getDocs(query(
                 collection(db, 'participants'),
-                where('userId', '==', user.uid),
-                orderBy('timestamp', 'desc')
+                where('userId', '==', user.uid)
             ));
             
+            const partDocs = partSnap.docs.map(doc => doc.data());
+            partDocs.sort((a, b) => {
+                const aTime = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+                const bTime = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+                return bTime - aTime;
+            });
             const joinedTours: (Tournament & { role: 'participant' | 'organizer'; registration?: any })[] = [];
-            const tournamentIds = partSnap.docs.map(doc => doc.data().tournamentId);
+            const tournamentIds = partDocs.map(data => data.tournamentId);
             const uniqueTournamentIds = [...new Set(tournamentIds)];
             
             if (uniqueTournamentIds.length > 0) {
@@ -63,10 +70,14 @@ const Dashboard: React.FC = () => {
             if (profile?.role === 'organizer' || profile?.role === 'admin') {
                 const hostedSnap = await getDocs(query(
                     collection(db, 'tournaments'),
-                    where('hostUid', '==', user.uid),
-                    orderBy('createdAt', 'desc')
+                    where('hostUid', '==', user.uid)
                 ));
                 hostedTours = hostedSnap.docs.map(d => ({ id: d.id, ...d.data(), role: 'organizer' } as Tournament & { role: 'participant' | 'organizer'; registration?: any }));
+                hostedTours.sort((a, b) => {
+                    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                    return bTime - aTime;
+                });
             }
 
             // Merge and remove duplicates (if any)
@@ -261,7 +272,7 @@ const Dashboard: React.FC = () => {
                                         )}
                                         {isCompleted && (
                                             <button 
-                                                onClick={() => navigate(`/details/${t.id}?tab=results`)}
+                                                onClick={() => setViewResultTournament(t)}
                                                 className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1"
                                             >
                                                 <BarChart className="w-4 h-4" /> View Result
@@ -282,6 +293,14 @@ const Dashboard: React.FC = () => {
                     onClose={() => setIsResultModalOpen(false)}
                     tournament={selectedTournament}
                     onSuccess={fetchAllData}
+                />
+            )}
+
+            {viewResultTournament && (
+                <TournamentResultModal
+                    isOpen={!!viewResultTournament}
+                    onClose={() => setViewResultTournament(null)}
+                    tournament={viewResultTournament}
                 />
             )}
         </div>

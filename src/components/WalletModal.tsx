@@ -233,6 +233,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
                   <div className="space-y-4">
                     <input 
                       type="number" 
+                      aria-label="Amount in rupees"
                       placeholder="Amount (Rs.)"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
@@ -240,6 +241,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
                     />
                     <input 
                       type="text" 
+                      aria-label="Sender Number"
                       placeholder="Sender Number"
                       value={senderNumber}
                       onChange={(e) => setSenderNumber(e.target.value)}
@@ -247,6 +249,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
                     />
                     <input 
                       type="text" 
+                      aria-label="Transaction Code or Name"
                       placeholder="Transaction Code / Name"
                       value={transactionCode}
                       onChange={(e) => setTransactionCode(e.target.value)}
@@ -272,6 +275,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
               <div className="space-y-4">
                 <input 
                   type="number" 
+                  aria-label="Withdraw Amount"
                   placeholder="Withdraw Amount"
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
@@ -279,6 +283,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
                 />
                 <select 
                   value={withdrawMethod}
+                  aria-label="Withdraw Method"
                   onChange={(e) => setWithdrawMethod(e.target.value)}
                   className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none font-bold"
                 >
@@ -288,6 +293,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, initialTab =
                   ))}
                 </select>
                 <textarea 
+                  aria-label="Account Details"
                   placeholder="Account Details (ID, Name, etc.)"
                   value={accountDetails}
                   onChange={(e) => setAccountDetails(e.target.value)}

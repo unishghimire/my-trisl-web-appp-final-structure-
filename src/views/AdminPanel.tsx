@@ -13,7 +13,7 @@ import TransactionDetailModal from '../components/admin/TransactionDetailModal';
 import TransactionHistoryTab from '../components/admin/TransactionHistoryTab';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
 import { DEFAULT_BANNER, NEXPLAY_LOGO } from '../constants';
-import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info, ExternalLink, CheckCircle, DollarSign } from 'lucide-react';
+import { Users, ArrowDown, ArrowUp, Settings, Gift, Layout, Check, X, Download, Search, Trash, Edit, Upload, Image as ImageIcon, CreditCard, Eye, QrCode, Plus, Bell, Megaphone, Trophy, Gamepad2, Tag, Sliders, Info, ExternalLink, CheckCircle, DollarSign, AlertTriangle } from 'lucide-react';
 
 // Admin Panel View - Main Management Hub
 const AdminPanel: React.FC = () => {
@@ -232,8 +232,14 @@ const AdminPanel: React.FC = () => {
                 setPaymentMethods(paySnap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentMethod)));
 
                 // Fetch Org Applications
-                const orgAppSnap = await getDocs(query(collection(db, 'orgApplications'), where('status', '==', 'pending'), orderBy('timestamp', 'desc')));
-                setOrgApplications(orgAppSnap.docs.map(d => ({ id: d.id, ...d.data() } as OrgApplication)));
+                const orgAppSnap = await getDocs(query(collection(db, 'orgApplications'), where('status', '==', 'pending')));
+                let orgApps = orgAppSnap.docs.map(d => ({ id: d.id, ...d.data() } as OrgApplication));
+                orgApps.sort((a,b) => {
+                    const aTime = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+                    const bTime = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+                    return bTime - aTime;
+                });
+                setOrgApplications(orgApps);
 
                 // Fetch Organizers
                 const orgsSnap = await getDocs(query(collection(db, 'users'), where('role', 'in', ['organizer', 'admin'])));
@@ -641,9 +647,15 @@ const AdminPanel: React.FC = () => {
         if (!orgId) return;
         setSelectedOrgId(orgId);
         try {
-            const q = query(collection(db, 'tournaments'), where('hostUid', '==', orgId), orderBy('createdAt', 'desc'));
+            const q = query(collection(db, 'tournaments'), where('hostUid', '==', orgId));
             const snap = await getDocs(q);
-            setOrgTournaments(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Tournament)));
+            let tours = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Tournament));
+            tours.sort((a,b) => {
+                const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                return bTime - aTime;
+            });
+            setOrgTournaments(tours);
         } catch (error) {
             console.error("Error fetching org tournaments:", error);
             showToast('Failed to fetch tournaments', 'error');

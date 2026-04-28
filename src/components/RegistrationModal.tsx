@@ -8,6 +8,7 @@ import { NotificationService } from '../services/NotificationService';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, Users, DollarSign, ShieldCheck } from 'lucide-react';
+import { formatCurrency } from '../utils';
 
 interface RegistrationModalProps {
     isOpen: boolean;
@@ -92,14 +93,6 @@ const RegistrationModal: React.FC<RegistrationModalProps> = ({
         } finally {
             setLoading(false);
         }
-    };
-
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'NPR',
-            maximumFractionDigits: 0
-        }).format(amount);
     };
 
     return (

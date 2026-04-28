@@ -1,7 +1,7 @@
-export const NEXPLAY_LOGO = 'https://firebasestorage.googleapis.com/v0/b/nexplay-app.appspot.com/o/assets%2Fnexplay-logo.png?alt=media&token=placeholder-token';
-export const DEFAULT_AVATAR = 'https://firebasestorage.googleapis.com/v0/b/nexplay-app.appspot.com/o/assets%2Fdefault-avatar.png?alt=media&token=placeholder-token';
-export const DEFAULT_BANNER = 'https://firebasestorage.googleapis.com/v0/b/nexplay-app.appspot.com/o/assets%2Fdefault-banner.jpg?alt=media&token=placeholder-token';
-export const DEFAULT_TEAM_LOGO = 'https://firebasestorage.googleapis.com/v0/b/nexplay-app.appspot.com/o/assets%2Fdefault-team.png?alt=media&token=placeholder-token';
+export const NEXPLAY_LOGO = '/logo.png';
+export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=6d28d9&color=fff';
+export const DEFAULT_BANNER = 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670&h=400';
+export const DEFAULT_TEAM_LOGO = 'https://ui-avatars.com/api/?name=Team&background=1f2937&color=cbd5e1';
 
 export const PRESET_AVATARS = [
     'https://api.dicebear.com/7.x/bottts/svg?seed=Cyber&backgroundColor=1a1a1a',

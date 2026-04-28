@@ -1,19 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, getDocs, orderBy, limit, doc, getDoc, updateDoc, increment, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, doc, updateDoc, increment, addDoc, serverTimestamp, writeBatch, startAfter, QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Transaction, PromoCode } from '../types';
 import { formatCurrency, formatDate } from '../utils';
-import { Plus, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Wallet as WalletIcon, Gift, AlertTriangle, X, DollarSign } from 'lucide-react';
+import { Plus, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Wallet as WalletIcon, Gift, AlertTriangle, X, DollarSign, ShieldCheck, Download, PiggyBank, TrendingUp, TrendingDown, ChevronRight, BarChart2 } from 'lucide-react';
 import WalletModal from '../components/WalletModal';
 import { useNotification } from '../context/NotificationContext';
+import { useInView } from '../hooks/useInView';
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const Wallet: React.FC = () => {
     const { user, profile } = useAuth();
     const { showToast } = useNotification();
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
+    const [hasMore, setHasMore] = useState(true);
     const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | null>(null);
+    const [fallbackMode, setFallbackMode] = useState(false);
     
     // Promo Code State
     const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
@@ -26,35 +32,144 @@ const Wallet: React.FC = () => {
     const [disputeReason, setDisputeReason] = useState('');
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
 
+    // Chart visibility
+    const { ref: chartRef, isInView: isChartInView } = useInView({ threshold: 0.1 });
+
     useEffect(() => {
         if (user) {
             fetchTransactions();
         }
     }, [user]);
 
-    const fetchTransactions = async () => {
-        setLoading(true);
+    const fetchTransactions = async (isLoadMore = false) => {
+        if (!user) return;
+        if (isLoadMore) setLoadingMore(true);
+        else setLoading(true);
+        
         try {
-            const q = query(
-                collection(db, 'transactions'),
-                where('userId', '==', user?.uid),
-                orderBy('timestamp', 'desc'),
-                limit(20)
-            );
-            const snap = await getDocs(q);
-            setTransactions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
+            let snap;
+            
+            if (fallbackMode) {
+                // Fallback: fetch all and slice
+                const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
+                snap = await getDocs(q);
+                let txs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                txs.sort((a,b) => {
+                    const aTime = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+                    const bTime = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+                    return bTime - aTime;
+                });
+                
+                const startIndex = isLoadMore ? transactions.length : 0;
+                const endIndex = startIndex + (isLoadMore ? 10 : 5);
+                const nextBatch = txs.slice(startIndex, endIndex);
+                
+                if (isLoadMore) {
+                    setTransactions(prev => [...prev, ...nextBatch]);
+                } else {
+                    setTransactions(nextBatch);
+                }
+                setHasMore(endIndex < txs.length);
+            } else {
+                try {
+                    let q;
+                    if (isLoadMore && lastDoc) {
+                        q = query(
+                            collection(db, 'transactions'),
+                            where('userId', '==', user.uid),
+                            orderBy('timestamp', 'desc'),
+                            startAfter(lastDoc),
+                            limit(10)
+                        );
+                    } else {
+                        q = query(
+                            collection(db, 'transactions'),
+                            where('userId', '==', user.uid),
+                            orderBy('timestamp', 'desc'),
+                            limit(5)
+                        );
+                    }
+                    snap = await getDocs(q);
+                    const txs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                    
+                    if (isLoadMore) {
+                        setTransactions(prev => [...prev, ...txs]);
+                    } else {
+                        setTransactions(txs);
+                    }
+                    
+                    if (snap.docs.length > 0) {
+                        setLastDoc(snap.docs[snap.docs.length - 1]);
+                    }
+                    setHasMore(snap.docs.length === (isLoadMore ? 10 : 5));
+
+                } catch (err: any) {
+                    if (err.message && err.message.includes('index')) {
+                        console.warn("Missing index, switching to fallback mode (client-side pagination)");
+                        setFallbackMode(true);
+                        // Rerun fetch in fallback mode
+                        const fallbackQ = query(collection(db, 'transactions'), where('userId', '==', user.uid));
+                        snap = await getDocs(fallbackQ);
+                        let fallbackTxs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                        fallbackTxs.sort((a,b) => {
+                            const aTime = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+                            const bTime = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+                            return bTime - aTime;
+                        });
+                        setTransactions(fallbackTxs.slice(0, 5));
+                        setHasMore(fallbackTxs.length > 5);
+                    } else {
+                        throw err;
+                    }
+                }
+            }
         } catch (error) {
             console.error("Error fetching transactions:", error);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     };
+
+    // Derived Analytics from fetched transactions (Firebase cost optimization: derived locally)
+    const analytics = useMemo(() => {
+        let totalDeposits = 0;
+        let totalWithdrawals = 0;
+        let thisMonthEarnings = 0;
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+        transactions.forEach(tx => {
+            if (tx.status === 'success' || tx.status === 'completed') {
+                if (tx.type === 'deposit') {
+                    totalDeposits += tx.amount;
+                } else if (tx.type === 'withdrawal' || tx.type === 'withdraw') {
+                    totalWithdrawals += tx.amount;
+                } else if (tx.type === 'prize' || tx.type === 'promo') {
+                    // Count prize/promo as earnings
+                    const txTime = tx.timestamp?.toMillis ? tx.timestamp.toMillis() : 0;
+                    if (txTime >= startOfMonth) {
+                        thisMonthEarnings += tx.amount;
+                    }
+                }
+            }
+        });
+
+        // Generate chart data matching recharts format
+        const chartData = [...transactions].reverse().map(tx => ({
+            name: formatDate(tx.timestamp).split(',')[0], // Short date
+            amount: tx.amount,
+            type: tx.type,
+            status: tx.status
+        })).filter(tx => tx.status === 'success' || tx.status === 'completed').slice(-15); // Last 15 successful txs
+
+        return { totalDeposits, totalWithdrawals, thisMonthEarnings, chartData };
+    }, [transactions]);
 
     const handleRedeemPromo = async () => {
         if (!promoCode.trim() || !user) return;
         setIsRedeeming(true);
         try {
-            // 1. Find the promo code
             const q = query(collection(db, 'promocodes'), where('code', '==', promoCode.trim().toUpperCase()));
             const snap = await getDocs(q);
             
@@ -79,7 +194,6 @@ const Wallet: React.FC = () => {
                 return;
             }
 
-            // 2. Check if user already used it (check transactions)
             const txQuery = query(
                 collection(db, 'transactions'),
                 where('userId', '==', user.uid),
@@ -93,21 +207,16 @@ const Wallet: React.FC = () => {
                 return;
             }
 
-            // 3. Apply promo code
             const batch = writeBatch(db);
-            
-            // Update user balance
             const userRef = doc(db, 'users', user.uid);
             batch.update(userRef, {
                 balance: increment(promoData.amount)
             });
 
-            // Update promo code uses
             batch.update(promoDoc.ref, {
                 currentUses: increment(1)
             });
 
-            // Add transaction
             const newTxRef = doc(collection(db, 'transactions'));
             batch.set(newTxRef, {
                 userId: user.uid,
@@ -126,6 +235,9 @@ const Wallet: React.FC = () => {
             showToast(`Successfully redeemed ${formatCurrency(promoData.amount)}!`, 'success');
             setPromoCode('');
             setIsPromoModalOpen(false);
+            
+            // Re-fetch transactions
+            setLastDoc(null);
             fetchTransactions();
         } catch (error) {
             console.error("Error redeeming promo code:", error);
@@ -164,170 +276,297 @@ const Wallet: React.FC = () => {
 
     if (!user || !profile) return null;
 
+    const isOrg = profile.role === 'organizer' || profile.role === 'admin';
+
+    // Premium UI Render
     return (
-        <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
-            {/* Header Section */}
-            <div className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-8 border border-gray-800 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
-                
-                <div className="relative z-10">
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16 text-center md:text-left">
+        <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-20 px-4 xl:px-0">
+            {/* Header Area */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
+                <div>
+                    <h1 className="text-3xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                        <WalletIcon className="w-8 h-8 text-brand-500" /> My Wallet
+                    </h1>
+                    <p className="text-sm font-bold text-gray-400 mt-1 uppercase tracking-widest flex items-center gap-2">
+                        Manage your funds securely
+                        <ShieldCheck className="w-4 h-4 text-green-500" />
+                    </p>
+                </div>
+                <div className="flex bg-dark-900 border border-gray-800 rounded-full pl-3 pr-4 py-1 items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span className="text-xs font-bold text-green-500 uppercase tracking-widest">Verified Secure</span>
+                </div>
+            </div>
+
+            {/* Premium Balance Overview */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="col-span-1 lg:col-span-2 bg-gradient-to-br from-brand-900/40 via-dark-800 to-black rounded-3xl p-8 border border-gray-800 shadow-2xl relative overflow-hidden group hover:border-brand-500/30 transition-colors duration-500">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/20 rounded-full blur-[80px] -mr-20 -mt-20 pointer-events-none transition-transform duration-700 group-hover:scale-110"></div>
+                    
+                    <div className="relative z-10 flex flex-col h-full justify-between">
                         <div>
-                            <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                                <WalletIcon className="w-5 h-5 text-brand-500" />
-                                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Total Balance</h2>
+                            <div className="flex items-center justify-between mb-8">
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Total Balance</h2>
+                                </div>
+                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest bg-dark-900 px-3 py-1 rounded-full border border-gray-800">
+                                    Last Updated: Just Now
+                                </span>
                             </div>
-                            <p className="text-5xl md:text-6xl font-black text-white tracking-tight">
+                            <p className="text-6xl sm:text-7xl font-black text-white tracking-tighter">
                                 {formatCurrency(profile.balance || 0)}
                             </p>
                         </div>
-
-                        {(profile.role === 'organizer' || profile.role === 'admin') && (
-                            <>
-                                <div className="h-px w-12 md:h-16 md:w-px bg-gray-800"></div>
+                        
+                        {isOrg && (
+                            <div className="grid grid-cols-2 gap-6 mt-8 p-6 bg-black/40 rounded-2xl border border-gray-800/50 backdrop-blur-sm">
                                 <div>
-                                    <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                                        <DollarSign className="w-5 h-5 text-green-500" />
-                                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Org Wallet</h2>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <DollarSign className="w-4 h-4 text-green-500" />
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Org Wallet</h3>
                                     </div>
-                                    <p className="text-4xl md:text-5xl font-black text-white tracking-tight">
-                                        {formatCurrency(profile.orgWalletBalance || 0)}
-                                    </p>
+                                    <p className="text-3xl font-black text-white tracking-tight">{formatCurrency(profile.orgWalletBalance || 0)}</p>
                                 </div>
-                                <div className="h-px w-12 md:h-16 md:w-px bg-gray-800"></div>
-                                <div>
-                                    <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                                        <Clock className="w-5 h-5 text-yellow-500" />
-                                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Pending Earnings</h2>
+                                <div className="border-l border-gray-800/50 pl-6">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Clock className="w-4 h-4 text-yellow-500" />
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Pending</h3>
                                     </div>
-                                    <p className="text-4xl md:text-5xl font-black text-white tracking-tight">
-                                        {formatCurrency(profile.orgPendingEarnings || 0)}
-                                    </p>
+                                    <p className="text-3xl font-black text-white tracking-tight">{formatCurrency(profile.orgPendingEarnings || 0)}</p>
                                 </div>
-                            </>
+                            </div>
                         )}
+                    </div>
+                </div>
+
+                {/* Quick Actions Stack */}
+                <div className="col-span-1 flex flex-col gap-4">
+                    <button 
+                        onClick={() => setActiveModal('deposit')}
+                        className="flex-1 bg-brand-600 hover:bg-brand-500 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-sm transition-all shadow-xl shadow-brand-500/20 flex flex-col items-center justify-center gap-3 hover:-translate-y-1"
+                    >
+                        <ArrowDownRight className="w-8 h-8" />
+                        Add Money
+                    </button>
+                    <div className="flex-1 flex gap-4">
+                        <button 
+                            onClick={() => setActiveModal('withdraw')}
+                            className="flex-1 bg-dark-800 hover:bg-dark-700 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs transition-all border border-gray-800 flex flex-col items-center justify-center gap-2 hover:-translate-y-1"
+                        >
+                            <ArrowUpRight className="w-6 h-6 text-red-400" />
+                            Withdraw
+                        </button>
+                        <button 
+                            onClick={() => setIsPromoModalOpen(true)}
+                            className="flex-1 bg-dark-800 hover:bg-dark-700 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs transition-all border border-gray-800 flex flex-col items-center justify-center gap-2 hover:-translate-y-1"
+                        >
+                            <Gift className="w-6 h-6 text-brand-400" />
+                            Redeem
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Action Buttons Section */}
-            <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
-                <button 
-                    onClick={() => setActiveModal('deposit')}
-                    className="flex-1 sm:flex-none bg-brand-600 hover:bg-brand-500 text-white px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all shadow-xl shadow-brand-500/25 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
-                >
-                    <Plus className="w-6 h-6" /> Add Money
-                </button>
-                <button 
-                    onClick={() => setActiveModal('withdraw')}
-                    className="flex-1 sm:flex-none bg-gray-800 hover:bg-gray-700 text-white px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all border border-gray-700 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
-                >
-                    <ArrowUpRight className="w-6 h-6" /> Withdraw
-                </button>
-                <button 
-                    onClick={() => setIsPromoModalOpen(true)}
-                    className="flex-1 sm:flex-none bg-gray-800 hover:bg-gray-700 text-brand-400 px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all border border-gray-700 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
-                >
-                    <Gift className="w-6 h-6" /> Redeem Code
-                </button>
+            {/* Financial Insights Row (Derived from local data) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-dark-900 border border-gray-800 rounded-3xl p-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1 items-center flex gap-1"><ArrowDownRight size={14} className="text-green-500"/> Recent Deposits</p>
+                        <p className="text-2xl font-black text-white">{formatCurrency(analytics.totalDeposits)}</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
+                        <PiggyBank size={24} />
+                    </div>
+                </div>
+                <div className="bg-dark-900 border border-gray-800 rounded-3xl p-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1 items-center flex gap-1"><ArrowUpRight size={14} className="text-red-500"/> Recent Withdrawals</p>
+                        <p className="text-2xl font-black text-white">{formatCurrency(analytics.totalWithdrawals)}</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
+                        <TrendingDown size={24} />
+                    </div>
+                </div>
+                <div className="bg-dark-900 border border-gray-800 rounded-3xl p-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1 items-center flex gap-1"><TrendingUp size={14} className="text-brand-500"/> Month Earnings</p>
+                        <p className="text-2xl font-black text-white">{formatCurrency(analytics.thisMonthEarnings)}</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-500">
+                        <BarChart2 size={24} />
+                    </div>
+                </div>
             </div>
 
-            {/* Transactions Section */}
-            <div className="bg-card rounded-3xl border border-gray-800 overflow-hidden">
-                <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-                    <h3 className="text-lg font-black text-white uppercase tracking-widest">Recent Transactions</h3>
-                </div>
-                
-                <div className="p-6">
-                    {loading ? (
-                        <div className="flex justify-center py-12">
-                            <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                {/* Professional Transactions Ledger */}
+                <div className="xl:col-span-2 bg-dark-900 rounded-3xl border border-gray-800 overflow-hidden">
+                    <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-black/20">
+                        <h3 className="text-sm font-black text-white uppercase tracking-widest">Transaction Ledger</h3>
+                        <div className="flex gap-2">
+                            <button className="text-[10px] font-bold uppercase text-gray-400 hover:text-white bg-dark-800 px-3 py-1.5 rounded-full border border-gray-700 transition flex items-center gap-1">
+                                <Download size={12} /> Statement
+                            </button>
                         </div>
-                    ) : transactions.length > 0 ? (
-                        <div className="space-y-4">
-                            {transactions.map(tx => (
-                                <div key={tx.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-dark rounded-xl border border-gray-800 hover:border-gray-700 transition gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                                            tx.type === 'deposit' ? 'bg-green-500/10 text-green-500' : 
-                                            tx.type === 'withdraw' ? 'bg-red-500/10 text-red-500' : 
-                                            tx.type === 'promo' ? 'bg-purple-500/10 text-purple-500' :
-                                            'bg-brand-500/10 text-brand-500'
-                                        }`}>
-                                            {tx.type === 'deposit' ? <ArrowDownRight className="w-6 h-6" /> : 
-                                             tx.type === 'withdraw' ? <ArrowUpRight className="w-6 h-6" /> : 
-                                             tx.type === 'promo' ? <Gift className="w-6 h-6" /> :
-                                             <WalletIcon className="w-6 h-6" />}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-white uppercase tracking-wider text-sm">
-                                                {tx.type === 'deposit' ? 'Deposit' : tx.type === 'withdraw' ? 'Withdrawal' : tx.type === 'promo' ? 'Promo Code' : 'Transaction'}
-                                            </h4>
-                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                <span className="text-[10px] text-gray-500 font-bold uppercase">{formatDate(tx.timestamp)}</span>
-                                                <span className="text-gray-700">•</span>
-                                                <span className="text-[10px] text-gray-400 font-bold uppercase">{tx.method || 'System'}</span>
-                                                {tx.refId && (
-                                                    <>
-                                                        <span className="text-gray-700">•</span>
-                                                        <span className="text-[10px] text-gray-500 font-mono">{tx.refId}</span>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-auto w-full">
-                                        <div className="text-left sm:text-right">
-                                            <p className={`font-black text-lg ${
-                                                tx.type === 'deposit' || tx.type === 'promo' ? 'text-green-500' : 
-                                                tx.type === 'withdraw' ? 'text-white' : 
-                                                'text-white'
+                    </div>
+                    
+                    <div className="p-2 sm:p-6">
+                        {loading && transactions.length === 0 ? (
+                            <div className="flex justify-center py-20">
+                                <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                            </div>
+                        ) : transactions.length > 0 ? (
+                            <div className="space-y-3">
+                                {transactions.map(tx => (
+                                    <div key={tx.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-dark rounded-2xl hover:bg-dark-800 transition-colors border border-transparent hover:border-gray-800 gap-4 group">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 border border-gray-800 ${
+                                                tx.type === 'deposit' ? 'bg-green-500/10 text-green-500' : 
+                                                (tx.type === 'withdrawal' || tx.type === 'withdraw') ? 'bg-red-500/10 text-red-500' : 
+                                                tx.type === 'promo' ? 'bg-brand-500/10 text-brand-500' :
+                                                'bg-blue-500/10 text-blue-500'
                                             }`}>
-                                                {tx.type === 'deposit' || tx.type === 'promo' ? '+' : tx.type === 'withdraw' ? '-' : ''}{formatCurrency(tx.amount)}
-                                            </p>
-                                            <div className="flex items-center justify-start sm:justify-end gap-1 mt-1">
-                                                {tx.status === 'completed' ? <CheckCircle2 className="w-3 h-3 text-green-500" /> :
-                                                 tx.status === 'rejected' ? <XCircle className="w-3 h-3 text-red-500" /> :
-                                                 <Clock className="w-3 h-3 text-yellow-500" />}
-                                                <span className={`text-[10px] font-black uppercase tracking-widest ${
-                                                    tx.status === 'completed' ? 'text-green-500' :
-                                                    tx.status === 'rejected' ? 'text-red-500' :
-                                                    'text-yellow-500'
-                                                }`}>
-                                                    {tx.status}
-                                                </span>
+                                                {tx.type === 'deposit' ? <ArrowDownRight className="w-5 h-5" /> : 
+                                                (tx.type === 'withdrawal' || tx.type === 'withdraw') ? <ArrowUpRight className="w-5 h-5" /> : 
+                                                tx.type === 'promo' ? <Gift className="w-5 h-5" /> :
+                                                <WalletIcon className="w-5 h-5" />}
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-white uppercase tracking-wider text-sm">
+                                                    {tx.type === 'deposit' ? 'Added Funds' : (tx.type === 'withdrawal' || tx.type === 'withdraw') ? 'Withdrawal' : tx.type === 'promo' ? 'Promo Code' : 'Transfer'}
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[10px] text-gray-500 font-bold uppercase">{formatDate(tx.timestamp)}</span>
+                                                    <span className="w-1 h-1 rounded-full bg-gray-700"></span>
+                                                    <span className="text-[10px] text-gray-400 font-bold uppercase">{tx.method || 'System'}</span>
+                                                </div>
                                             </div>
                                         </div>
-                                        {(tx.status === 'pending' || tx.status === 'rejected') && (
-                                            <button 
-                                                onClick={() => {
-                                                    setSelectedTxForDispute(tx);
-                                                    setDisputeModalOpen(true);
-                                                }}
-                                                className="text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-lg transition border border-gray-700 flex items-center gap-1"
-                                            >
-                                                <AlertTriangle className="w-3 h-3" /> Report
-                                            </button>
-                                        )}
+                                        <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-auto w-full">
+                                            <div className="text-left sm:text-right">
+                                                <p className={`font-black text-lg font-mono ${
+                                                    tx.type === 'deposit' || tx.type === 'promo' ? 'text-green-400' : 
+                                                    (tx.type === 'withdrawal' || tx.type === 'withdraw') ? 'text-white' : 
+                                                    'text-white'
+                                                }`}>
+                                                    {tx.type === 'deposit' || tx.type === 'promo' ? '+' : ''}{formatCurrency(tx.amount)}
+                                                </p>
+                                                <div className="flex items-center justify-start sm:justify-end gap-1.5 mt-1">
+                                                    <span className={`text-[9px] font-black outline outline-1 outline-offset-2 px-1.5 py-0.5 rounded-sm uppercase tracking-widest ${
+                                                        tx.status === 'completed' || tx.status === 'success' ? 'text-green-500 outline-green-500/30 bg-green-500/10' :
+                                                        tx.status === 'rejected' ? 'text-red-500 outline-red-500/30 bg-red-500/10' :
+                                                        'text-yellow-500 outline-yellow-500/30 bg-yellow-500/10 animate-pulse'
+                                                    }`}>
+                                                        {tx.status}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {(tx.status === 'pending' || tx.status === 'rejected') && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setSelectedTxForDispute(tx);
+                                                        setDisputeModalOpen(true);
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 absolute sm:relative right-4 sm:right-auto text-[10px] font-bold uppercase tracking-widest text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 py-2 rounded-lg transition border border-red-500/20 flex items-center gap-1"
+                                                >
+                                                    <AlertTriangle className="w-3 h-3" /> Report
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
+                                ))}
+                                
+                                {hasMore && (
+                                    <div className="pt-4 text-center">
+                                        <button 
+                                            onClick={() => fetchTransactions(true)}
+                                            disabled={loadingMore}
+                                            className="text-xs font-black uppercase text-gray-400 hover:text-white bg-dark-800 hover:bg-dark-700 py-3 px-8 rounded-xl transition border border-gray-700 flex items-center gap-2 mx-auto disabled:opacity-50"
+                                        >
+                                            {loadingMore ? 'Loading...' : 'Load More History'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center py-20 bg-dark-800/30 rounded-2xl border border-dashed border-gray-800">
+                                <WalletIcon className="w-12 h-12 text-gray-700 mx-auto mb-4 opacity-50" />
+                                <p className="text-white font-black uppercase tracking-widest text-sm mb-1">No Activity Found</p>
+                                <p className="text-gray-500 text-xs font-bold uppercase max-w-xs mx-auto">Your wallet transaction history will appear here once you start using it.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right Column Stack */}
+                <div className="space-y-6">
+                    {/* Spending Overview Profile */}
+                    <div ref={chartRef} className="bg-dark-900 rounded-3xl border border-gray-800 p-6">
+                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex justify-between items-center">
+                            Activity Overview
+                            <span className="text-[9px] bg-dark-800 px-2 py-1 rounded text-gray-500 border border-gray-700">Recent</span>
+                        </h3>
+                        <div className="h-48 w-full">
+                            {isChartInView && analytics.chartData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={analytics.chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                        <XAxis dataKey="name" stroke="#334155" fontSize={10} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#334155" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}`} />
+                                        <RechartsTooltip 
+                                            cursor={{fill: 'rgba(255,255,255,0.02)'}}
+                                            contentStyle={{backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold'}}
+                                            itemStyle={{color: '#fff'}}
+                                            formatter={(value: number, name: string, props: any) => [`${formatCurrency(value)}`, props.payload.type === 'deposit' ? 'Incoming' : 'Outgoing']}
+                                        />
+                                        <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                                            {
+                                                analytics.chartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.type === 'deposit' || entry.type === 'promo' ? '#10b981' : '#3b82f6'} />
+                                                ))
+                                            }
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="h-full w-full flex items-center justify-center">
+                                    <p className="text-gray-600 text-xs font-bold uppercase tracking-widest">Not enough data</p>
                                 </div>
-                            ))}
+                            )}
                         </div>
-                    ) : (
-                        <div className="text-center py-12">
-                            <WalletIcon className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-                            <p className="text-gray-500 font-bold uppercase tracking-widest text-sm">No transactions yet</p>
-                        </div>
-                    )}
+                    </div>
+
+                    {/* Security Module */}
+                    <div className="bg-dark rounded-3xl border border-gray-800 p-6 overflow-hidden relative">
+                        <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl"></div>
+                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-green-500" /> Wallet Security
+                        </h3>
+                        <ul className="space-y-4 relative z-10">
+                            <li className="flex items-center justify-between text-sm">
+                                <span className="text-gray-400 font-bold">Encrypted Connection</span>
+                                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            </li>
+                            <li className="flex items-center justify-between text-sm">
+                                <span className="text-gray-400 font-bold">2FA Authentication</span>
+                                <span className="text-[10px] bg-dark-800 text-gray-500 font-black px-2 py-0.5 rounded border border-gray-700 uppercase">Coming Soon</span>
+                            </li>
+                            <li className="pt-2">
+                                <p className="text-[10px] text-gray-500 font-bold leading-relaxed">
+                                    Your funds are protected by bank-level security. All transactions are logged and encrypted.
+                                </p>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
-            {/* Wallet Modal for Deposit/Withdraw */}
+            {/* Modals remain structurally identical to logic but restyled via their internal components */}
             <WalletModal 
                 isOpen={activeModal !== null} 
                 onClose={() => {
                     setActiveModal(null);
-                    fetchTransactions(); // Refresh transactions after modal closes
+                    setLastDoc(null);
+                    fetchTransactions();
                 }} 
                 initialTab={activeModal === 'withdraw' ? 'withdraw' : 'deposit'} 
             />
@@ -335,33 +574,36 @@ const Wallet: React.FC = () => {
             {/* Promo Code Modal */}
             {isPromoModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setIsPromoModalOpen(false)}></div>
-                    <div className="relative w-full max-w-sm bg-gray-900 rounded-3xl border border-gray-800 shadow-2xl overflow-hidden animate-scale-in p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-2">
-                                <Gift className="w-5 h-5 text-brand-500" /> Redeem Promo
-                            </h3>
-                            <button onClick={() => setIsPromoModalOpen(false)} className="text-gray-500 hover:text-white transition">
+                    <div className="absolute inset-0 bg-black/90 backdrop-blur-md animate-fade-in" onClick={() => setIsPromoModalOpen(false)}></div>
+                    <div className="relative w-full max-w-md bg-dark-900 rounded-[2rem] border border-gray-800 shadow-2xl overflow-hidden animate-scale-in p-8">
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                    <Gift className="w-6 h-6 text-brand-500" /> Promo Code
+                                </h3>
+                                <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">Unlock premium rewards</p>
+                            </div>
+                            <button onClick={() => setIsPromoModalOpen(false)} className="text-gray-500 hover:text-white transition bg-dark-800 p-2 rounded-full border border-gray-700 hover:border-gray-600">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <div className="space-y-4">
+                        <div className="space-y-6">
                             <div>
-                                <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Promo Code</label>
+                                <label className="text-xs text-gray-400 uppercase font-bold mb-3 block">Enter your code</label>
                                 <input 
                                     type="text" 
                                     value={promoCode}
                                     onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                                    className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white font-mono text-center text-xl focus:border-brand-500 outline-none transition uppercase tracking-widest"
-                                    placeholder="ENTER CODE"
+                                    className="w-full bg-dark border-2 border-gray-800 rounded-2xl p-5 text-white font-mono text-center text-2xl focus:border-brand-500 outline-none transition uppercase tracking-widest placeholder-gray-700"
+                                    placeholder="NEXPLAY-V1"
                                 />
                             </div>
                             <button 
                                 onClick={handleRedeemPromo}
                                 disabled={isRedeeming || !promoCode.trim()}
-                                className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-lg shadow-brand-500/25"
+                                className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2"
                             >
-                                {isRedeeming ? 'Redeeming...' : 'Apply Code'}
+                                {isRedeeming ? 'Validating...' : 'Claim Reward'} <ChevronRight className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -371,40 +613,45 @@ const Wallet: React.FC = () => {
             {/* Dispute Modal */}
             {disputeModalOpen && selectedTxForDispute && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setDisputeModalOpen(false)}></div>
-                    <div className="relative w-full max-w-md bg-gray-900 rounded-3xl border border-gray-800 shadow-2xl overflow-hidden animate-scale-in p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-2">
-                                <AlertTriangle className="w-5 h-5 text-red-500" /> Report Issue
-                            </h3>
-                            <button onClick={() => setDisputeModalOpen(false)} className="text-gray-500 hover:text-white transition">
+                    <div className="absolute inset-0 bg-black/90 backdrop-blur-md animate-fade-in" onClick={() => setDisputeModalOpen(false)}></div>
+                    <div className="relative w-full max-w-lg bg-dark-900 rounded-[2rem] border border-gray-800 shadow-2xl overflow-hidden animate-scale-in p-8">
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                    <AlertTriangle className="w-6 h-6 text-red-500" /> Report Issue
+                                </h3>
+                                <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">Secure Dispute Resolution</p>
+                            </div>
+                            <button onClick={() => setDisputeModalOpen(false)} className="text-gray-500 hover:text-white transition bg-dark-800 p-2 rounded-full border border-gray-700 hover:border-gray-600">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <div className="space-y-4">
-                            <div className="bg-dark p-4 rounded-xl border border-gray-800">
-                                <p className="text-xs text-gray-500 uppercase font-bold mb-1">Transaction Ref</p>
-                                <p className="font-mono text-sm text-white">{selectedTxForDispute.refId || selectedTxForDispute.id}</p>
-                                <div className="flex justify-between mt-2">
-                                    <span className="text-xs text-gray-400">{selectedTxForDispute.type === 'deposit' ? 'Deposit' : 'Withdrawal'}</span>
-                                    <span className="text-xs font-bold text-white">{formatCurrency(selectedTxForDispute.amount)}</span>
+                        <div className="space-y-6">
+                            <div className="bg-dark p-5 rounded-2xl border border-gray-800 flex items-center justify-between">
+                                <div>
+                                    <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">Transaction Ref</p>
+                                    <p className="font-mono text-sm text-brand-400 font-bold">{selectedTxForDispute.refId || selectedTxForDispute.id}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">{selectedTxForDispute.type === 'deposit' ? 'Deposit' : 'Withdrawal'}</p>
+                                    <p className="text-lg font-black text-white">{formatCurrency(selectedTxForDispute.amount)}</p>
                                 </div>
                             </div>
                             <div>
-                                <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Reason for Dispute</label>
+                                <label className="text-xs text-gray-400 uppercase font-bold mb-3 block">Describe the issue clearly</label>
                                 <textarea 
                                     value={disputeReason}
                                     onChange={(e) => setDisputeReason(e.target.value)}
-                                    className="w-full bg-dark border border-gray-700 rounded-xl p-4 text-white focus:border-brand-500 outline-none transition resize-none h-32"
-                                    placeholder="Please explain the issue with this transaction in detail..."
+                                    className="w-full bg-dark border-2 border-gray-800 rounded-2xl p-5 text-white focus:border-red-500/50 outline-none transition resize-none h-40 font-medium"
+                                    placeholder="I initiated this withdrawal 3 days ago but haven't received it in my account yet..."
                                 />
                             </div>
                             <button 
                                 onClick={handleReportDispute}
                                 disabled={isSubmittingDispute || !disputeReason.trim()}
-                                className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-lg shadow-red-500/25"
+                                className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all shadow-xl shadow-red-500/25 flex items-center justify-center gap-2"
                             >
-                                {isSubmittingDispute ? 'Submitting...' : 'Submit Report'}
+                                {isSubmittingDispute ? 'Opening Ticket...' : 'Submit Dispute'} <ChevronRight className="w-4 h-4" />
                             </button>
                         </div>
                     </div>

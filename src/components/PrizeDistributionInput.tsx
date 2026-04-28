@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Plus, Trash2, GripVertical, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { PrizeDistribution } from '../types';
+import { formatCurrency } from '../utils';
 
 interface PrizeDistributionInputProps {
     prizes: PrizeDistribution[];
@@ -234,8 +235,8 @@ export default function PrizeDistributionInput({
                 <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-400">Total Distributed:</span>
                     <span className={`font-mono font-bold ${isOverBudget ? 'text-red-400' : 'text-brand-400'}`}>
-                        {CURRENCIES.find(c => c.code === currency)?.symbol || currency} {currentTotal.toLocaleString()}
-                        {totalPrizePool > 0 && ` / ${totalPrizePool.toLocaleString()}`}
+                        {formatCurrency(currentTotal, (CURRENCIES.find(c => c.code === currency)?.symbol || currency) + ' ')}
+                        {totalPrizePool > 0 && ` / ${formatCurrency(totalPrizePool, '')}`}
                     </span>
                 </div>
                 

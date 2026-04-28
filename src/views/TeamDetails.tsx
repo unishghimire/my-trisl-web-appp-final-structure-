@@ -8,7 +8,7 @@ import { Team, TeamMember, UserProfile, TeamInvite, TeamActivity } from '../type
 import { Users, Shield, UserPlus, Settings, LogOut, Check, X, ArrowLeft, Crown, Activity, Image as ImageIcon, CheckCircle2, Globe, Calendar, Trophy, Zap, ChevronRight, Star } from 'lucide-react';
 import { useInvisibleImage } from '../hooks/useInvisibleImage';
 import { NEXPLAY_LOGO, PRESET_TEAM_LOGOS } from '../constants';
-import { timeAgo, formatDate } from '../utils';
+import { timeAgo, formatDate, formatCurrency } from '../utils';
 import Modal from '../components/Modal';
 import { motion } from 'motion/react';
 
@@ -469,7 +469,7 @@ const TeamDetails: React.FC = () => {
                                     <div className="flex flex-wrap items-center gap-4 text-sm font-bold text-gray-400 mb-4">
                                         <div className="flex items-center gap-2"><Globe className="w-4 h-4" /> {team.region || 'Global'}</div>
                                         <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Founded {team.formationDate ? formatDate(team.formationDate) : 'Recently'}</div>
-                                        <div className="flex items-center gap-2 text-brand-400"><Trophy className="w-4 h-4" /> NPR {team.totalEarnings?.toLocaleString() || 0} Total Prize</div>
+                                        <div className="flex items-center gap-2 text-brand-400"><Trophy className="w-4 h-4" /> {formatCurrency(team.totalEarnings, 'NPR ')} Total Prize</div>
                                     </div>
                                     <p className="text-gray-400 font-medium max-w-2xl line-clamp-2">{team.description || 'No description provided.'}</p>
                                 </div>
@@ -512,7 +512,7 @@ const TeamDetails: React.FC = () => {
                     { label: 'Team Points', value: team.points || 0, icon: Star, color: 'text-yellow-500' },
                     { label: 'Total Wins', value: team.wins || 0, icon: Trophy, color: 'text-brand-500' },
                     { label: 'Rank Position', value: `#${team.ranking || 'N/A'}`, icon: Zap, color: 'text-purple-500' },
-                    { label: 'Total Earnings', value: `Rs. ${team.totalEarnings?.toLocaleString() || 0}`, icon: Trophy, color: 'text-green-500' }
+                    { label: 'Total Earnings', value: formatCurrency(team.totalEarnings), icon: Trophy, color: 'text-green-500' }
                 ].map((stat, i) => (
                     <div key={i} className="bg-card p-6 rounded-3xl border border-gray-800 shadow-lg hover:border-gray-700 transition group">
                         <div className={`p-2 rounded-xl bg-white/5 w-fit mb-3 group-hover:scale-110 transition-transform`}>
@@ -732,22 +732,42 @@ const TeamDetails: React.FC = () => {
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block">Logo URL</label>
-                            <input 
-                                type="text" 
-                                value={editLogo} 
-                                onChange={(e) => setEditLogo(e.target.value)}
-                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition text-xs font-mono"
-                            />
+                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block">Logo URL or Paste Image</label>
+                            <div className="relative group">
+                                <input 
+                                    type="text" 
+                                    value={editLogo} 
+                                    onChange={(e) => setEditLogo(e.target.value)}
+                                    onPaste={logoUpload.handlePaste}
+                                    onDrop={logoUpload.handleDrop}
+                                    onDragOver={logoUpload.handleDragOver}
+                                    placeholder={isUploadingLogo ? "Uploading..." : "Paste URL or Image (Ctrl+V)"}
+                                    disabled={isUploadingLogo}
+                                    className={`w-full bg-dark border ${isUploadingLogo ? 'border-brand-500' : 'border-gray-700 focus:border-brand-500'} rounded-xl px-4 py-3 text-white outline-none transition text-xs font-mono pr-10`}
+                                />
+                                {isUploadingLogo && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                                )}
+                            </div>
                         </div>
                         <div>
-                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block">Banner URL</label>
-                            <input 
-                                type="text" 
-                                value={editBanner} 
-                                onChange={(e) => setEditBanner(e.target.value)}
-                                className="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-brand-500 outline-none transition text-xs font-mono"
-                            />
+                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-2 block">Banner URL or Paste Image</label>
+                            <div className="relative group">
+                                <input 
+                                    type="text" 
+                                    value={editBanner} 
+                                    onChange={(e) => setEditBanner(e.target.value)}
+                                    onPaste={bannerUpload.handlePaste}
+                                    onDrop={bannerUpload.handleDrop}
+                                    onDragOver={bannerUpload.handleDragOver}
+                                    placeholder={isUploadingBanner ? "Uploading..." : "Paste URL or Image (Ctrl+V)"}
+                                    disabled={isUploadingBanner}
+                                    className={`w-full bg-dark border ${isUploadingBanner ? 'border-brand-500' : 'border-gray-700 focus:border-brand-500'} rounded-xl px-4 py-3 text-white outline-none transition text-xs font-mono pr-10`}
+                                />
+                                {isUploadingBanner && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                                )}
+                            </div>
                         </div>
                     </div>
 

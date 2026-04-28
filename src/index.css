@@ -12,6 +12,15 @@
   --color-surface: #334155;
 }
 
+@layer base {
+  button, a {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1120];
+  }
+  input, textarea, select {
+    @apply focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors;
+  }
+}
+
 body {
   background-color: #0b1120;
   color: #e2e8f0;

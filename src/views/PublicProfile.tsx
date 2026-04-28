@@ -8,7 +8,7 @@ import { UserProfile, Team, Tournament, OrgPost, MatchHistory } from '../types';
 import { Shield, Trophy, Briefcase, Users, ArrowLeft, CheckCircle2, Copy, UserPlus, UserMinus, Calendar, Share2, Eye, MessageSquare, Plus, Star, Activity, Award, Zap, ChevronRight } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
 import Modal from '../components/Modal';
-import { formatDate, timeAgo } from '../utils';
+import { formatDate, timeAgo, formatCurrency } from '../utils';
 import { motion } from 'motion/react';
 
 const PublicProfile: React.FC = () => {
@@ -225,7 +225,7 @@ const PublicProfile: React.FC = () => {
         );
     }
 
-    const isRankOne = profile.rank === '1' || profile.points === 10000; // Mock check for #1
+    const isRankOne = profile.rank === '1'; // Removed mock check
 
     return (
         <div className="max-w-5xl mx-auto animate-fade-in pb-20 px-4">
@@ -374,7 +374,7 @@ const PublicProfile: React.FC = () => {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Prize</p>
-                                                <p className="font-black text-brand-400">NPR {match.prize.toLocaleString()}</p>
+                                                <p className="font-black text-brand-400">{formatCurrency(match.prize, 'NPR ')}</p>
                                             </div>
                                         </div>
                                     </div>

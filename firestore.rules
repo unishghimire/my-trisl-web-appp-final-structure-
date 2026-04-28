@@ -1,19 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
     // Fields: uid, email, username, role, balance, totalEarnings, inGameId, teamName, phone, isBanned, createdAt, bio, profilePicUrl, contactInfo
     //
     // Collection: users_public
     // Fields: uid, username, totalEarnings, inGameId, role, updatedAt
     //
     // Collection: tournaments
-    // Fields: id, title, game, gameMode, entryFee, prizePool, startTime, status, hostId, hostName, maxParticipants, currentParticipants, rules, banner, resultUrl, winners
+    // Fields: id, title, game, gameMode, entryFee, prizePool, startTime, status, hostUid, hostName, maxParticipants, currentParticipants, rules, banner, resultUrl, winners
     //
     // Collection: participants
     // Fields: tournamentId, userId, username, inGameId, teamName, joinedAt, status
@@ -38,7 +32,7 @@ service cloud.firestore {
     // ===============================================================
     // Helper Functions
     // ===============================================================
-    
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -89,18 +83,11 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       
       allow create: if isOwner(userId) && 
-        isValidUser(request.resource.data) &&
         request.resource.data.role == 'player' && // Default role
         request.resource.data.balance == 0 &&
         request.resource.data.totalEarnings == 0;
         
-      allow update: if (isOwner(userId) && 
-        isValidUser(request.resource.data) &&
-        request.resource.data.role == resource.data.role && // Cannot change own role
-        request.resource.data.balance == resource.data.balance && // Cannot change own balance
-        request.resource.data.totalEarnings == resource.data.totalEarnings &&
-        request.resource.data.uid == resource.data.uid &&
-        request.resource.data.email == resource.data.email) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
     }
 
     // Public User Profiles (For Leaderboard)
@@ -111,15 +98,14 @@ service cloud.firestore {
 
     // Games Listing
     match /games/{gameId} {
-      allow read: if resource.data.isPublished == true || isAdmin();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     // Tournaments
     match /tournaments/{tournamentId} {
       allow read: if true;
       allow create: if isOrganizer() && isValidTournament(request.resource.data);
-      allow update: if isAdmin() || (isOrganizer() && resource.data.hostId == request.auth.uid && isValidTournament(request.resource.data));
+      allow update: if isAdmin() || (isOrganizer() && resource.data.hostUid == request.auth.uid && isValidTournament(request.resource.data));
       allow delete: if isAdmin();
     }
 
@@ -128,16 +114,15 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || (isAuthenticated() && (resource.data.userId == request.auth.uid || 
-        get(/databases/$(database)/documents/tournaments/$(resource.data.tournamentId)).data.hostId == request.auth.uid));
+        get(/databases/$(database)/documents/tournaments/$(resource.data.tournamentId)).data.hostUid == request.auth.uid));
     }
 
-    // Notifications
+    match /test/{documentId} {
+      allow read: if true;
+    }
+
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated(); // Allow users to notify each other (e.g. system actions)
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, write: if true;
     }
 
     // Transactions
@@ -217,12 +202,6 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isAuthenticated();
       allow update, delete: if isAdmin();
-    }
-
-    // Match History
-    match /match_history/{matchId} {
-      allow read: if true;
-      allow write: if isAdmin();
     }
 
     // Match History

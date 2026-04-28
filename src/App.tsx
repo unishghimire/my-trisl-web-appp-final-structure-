@@ -38,6 +38,7 @@ const GamesBrowser = lazy(() => import('./views/GamesBrowser'));
 const GameModesBrowser = lazy(() => import('./views/GameModesBrowser'));
 const Login = lazy(() => import('./views/Login'));
 const Register = lazy(() => import('./views/Register'));
+const NotFound = lazy(() => import('./views/NotFound'));
 
 interface ToastData {
   id: number;
@@ -59,7 +60,7 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
   const isHome = location.pathname === '/';
 
   return (
-    <div id="app" className="min-h-screen flex flex-col relative">
+    <div id="app" className="min-h-screen flex flex-col relative overflow-x-hidden">
       <Navbar />
       
       <Breadcrumbs />
@@ -98,6 +99,7 @@ const AppContent = ({ toasts, removeToast }: { toasts: ToastData[], removeToast:
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/privacy" element={<Privacy />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </ProfileCompletionGuard>

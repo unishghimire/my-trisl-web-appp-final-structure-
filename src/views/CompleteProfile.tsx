@@ -17,13 +17,14 @@ const CompleteProfile: React.FC = () => {
     const [selectedAvatar, setSelectedAvatar] = useState(PRESET_AVATARS[0]);
     const [isSaving, setIsSaving] = useState(false);
 
-    if (!user || !profile) return null;
+    React.useEffect(() => {
+        if (profile?.inGameId && profile?.inGameName) {
+            navigate('/dashboard');
+        }
+    }, [profile, navigate]);
 
-    // If already completed, redirect to dashboard
-    if (profile.inGameId && profile.inGameName) {
-        navigate('/dashboard');
-        return null;
-    }
+    if (!user || !profile) return null;
+    if (profile?.inGameId && profile?.inGameName) return null;
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -38,21 +39,30 @@ const CompleteProfile: React.FC = () => {
             const userRef = doc(db, 'users', user.uid);
             const publicRef = doc(db, 'users_public', user.uid);
 
-            batch.update(userRef, {
-                inGameId: inGameId.trim(),
-                inGameName: inGameName.trim(),
-                profilePicUrl: selectedAvatar,
-                updatedAt: serverTimestamp()
-            });
+            try {
+                await updateDoc(userRef, {
+                    inGameId: inGameId.trim(),
+                    inGameName: inGameName.trim(),
+                    profilePicUrl: selectedAvatar,
+                    updatedAt: serverTimestamp()
+                });
+            } catch (e) {
+                console.error("userRef update failed", e);
+                throw e;
+            }
 
-            batch.set(publicRef, {
-                inGameId: inGameId.trim(),
-                inGameName: inGameName.trim(),
-                profilePicUrl: selectedAvatar,
-                updatedAt: serverTimestamp()
-            }, { merge: true });
+            try {
+                await updateDoc(publicRef, {
+                    inGameId: inGameId.trim(),
+                    inGameName: inGameName.trim(),
+                    profilePicUrl: selectedAvatar,
+                    updatedAt: serverTimestamp()
+                });
+            } catch (e) {
+                console.error("publicRef update failed", e);
+                throw e;
+            }
 
-            await batch.commit();
             showToast('Profile completed! Welcome to NexPlayOrg.', 'success');
             navigate('/dashboard');
         } catch (error) {

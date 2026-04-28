@@ -44,27 +44,47 @@ export const NotificationService = {
 
     // Listen for unread notifications for a user
     onUnreadCount: (userId: string, callback: (count: number) => void) => {
-        const q = query(collection(db, 'notifications'), where('userId', '==', userId), where('read', '==', false));
-        return onSnapshot(q, (snapshot) => {
-            callback(snapshot.size);
-        }, (error) => {
-            console.error("Error in onUnreadCount snapshot:", error);
-        });
+        if (!userId) return () => {};
+        try {
+            const q = query(collection(db, 'notifications'), where('userId', '==', userId), where('read', '==', false));
+            return onSnapshot(q, (snapshot) => {
+                callback(snapshot.size);
+            }, (error) => {
+                console.warn("Permission restricted for unread count, returning 0");
+                callback(0);
+            });
+        } catch (e) {
+            console.warn("Could not fetch unread count:", e);
+            callback(0);
+            return () => {};
+        }
     },
 
     // Listen for all notifications for a user
     onNotifications: (userId: string, callback: (notifications: Notification[]) => void) => {
-        const q = query(
-            collection(db, 'notifications'),
-            where('userId', '==', userId),
-            orderBy('timestamp', 'desc')
-        );
-        return onSnapshot(q, (snapshot) => {
-            const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
-            callback(notifications);
-        }, (error) => {
-            console.error("Error in onNotifications snapshot:", error);
-        });
+        if (!userId) return () => {};
+        try {
+            const q = query(
+                collection(db, 'notifications'),
+                where('userId', '==', userId)
+            );
+            return onSnapshot(q, (snapshot) => {
+                let notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+                notifications.sort((a,b) => {
+                    const aTime = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+                    const bTime = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+                    return bTime - aTime;
+                });
+                callback(notifications);
+            }, (error) => {
+                console.warn("Permission restricted for notifications, returning empty");
+                callback([]);
+            });
+        } catch (e) {
+            console.warn("Could not fetch notifications:", e);
+            callback([]);
+            return () => {};
+        }
     },
 
     // Notify all participants of a tournament

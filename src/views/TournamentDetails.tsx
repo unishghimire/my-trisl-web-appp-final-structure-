@@ -17,6 +17,7 @@ import { Helmet } from 'react-helmet-async';
 import ProfileLink from '../components/ProfileLink';
 import PrizeBoard from '../components/PrizeBoard';
 import ResultBoard from '../components/ResultBoard';
+import TournamentResultModal from '../components/TournamentResultModal';
 
 const TournamentDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -30,6 +31,7 @@ const TournamentDetails: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'overview' | 'description' | 'participants' | 'results'>(
         (searchParams.get('tab') as any) || 'overview'
     );
+    const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [participants, setParticipants] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [relatedTournaments, setRelatedTournaments] = useState<Tournament[]>([]);
@@ -127,6 +129,15 @@ const TournamentDetails: React.FC = () => {
 
         fetchAllData();
     }, [id, user, profile?.teamId]);
+
+    useEffect(() => {
+        if (!loading && tournament && searchParams.get('tab') === 'results') {
+            setIsResultModalOpen(true);
+            setActiveTab('overview');
+            // Remove the ?tab=results from URL so refreshing won't keep popping it
+            navigate(`/details/${tournament.id}`, { replace: true });
+        }
+    }, [searchParams, tournament, loading, navigate]);
 
     useEffect(() => {
         const fetchTeamMembers = async () => {
@@ -316,7 +327,7 @@ const TournamentDetails: React.FC = () => {
     const bannerUrl = tournament.bannerUrl || DEFAULT_BANNER;
     const bannerStyle = { backgroundImage: `url('${bannerUrl}')`, backgroundSize: 'cover', backgroundPosition: 'center' };
     const showRoom = isJoined && (tournament.status === 'live' || (tournament.roomId && tournament.status === 'upcoming'));
-    console.log("Debug showRoom:", { showRoom, isJoined, status: tournament.status, roomId: tournament.roomId });
+    // No-op
     const ytId = getYoutubeId(tournament.ytLink);
 
     return (
@@ -391,18 +402,24 @@ const TournamentDetails: React.FC = () => {
                 {/* Main Content */}
                 <div className="lg:col-span-8 space-y-8">
                     {/* Tabs Navigation */}
-                    <div className="flex p-1 bg-surface rounded-2xl border border-gray-800 sticky top-4 z-10 backdrop-blur-xl">
+                    <div className="flex p-1 bg-surface rounded-2xl border border-gray-800 sticky top-20 sm:top-24 z-10 backdrop-blur-xl overflow-x-auto custom-scrollbar">
                         {[
                             { id: 'overview', label: 'Overview', icon: Info },
                             { id: 'description', label: 'Description', icon: Info },
                             { id: 'participants', label: 'Players', icon: Users },
-                            { id: 'results', label: 'Results', icon: Trophy },
-                        ].map((tab) => (
+                            tournament.status === 'completed' ? { id: 'results', label: 'Results', icon: Trophy } : null
+                        ].filter((tab): tab is {id: string, label: string, icon: any} => tab !== null).map((tab) => (
                             <button 
                                 key={tab.id}
-                                onClick={() => setActiveTab(tab.id as any)}
+                                onClick={() => {
+                                    if (tab.id === 'results') {
+                                        setIsResultModalOpen(true);
+                                    } else {
+                                        setActiveTab(tab.id as any);
+                                    }
+                                }}
                                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${
-                                    activeTab === tab.id 
+                                    (activeTab === tab.id && tab.id !== 'results') 
                                     ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/20' 
                                     : 'text-gray-500 hover:text-gray-300'
                                 }`}
@@ -630,88 +647,8 @@ const TournamentDetails: React.FC = () => {
                                 </div>
                             </motion.div>
                         )}
-
-                        {activeTab === 'results' && (
-                            <motion.div 
-                                key="results"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -10 }}
-                                className="space-y-6"
-                            >
-                                {tournament.prizeDistribution && tournament.prizeDistribution.length > 0 && (
-                                    <div className="mb-8">
-                                        <PrizeBoard 
-                                            prizes={tournament.prizeDistribution} 
-                                            currency={tournament.currency} 
-                                            totalPrizePool={tournament.prizePool}
-                                        />
-                                    </div>
-                                )}
-
-                                {tournament.status === 'completed' ? (
-                                    <>
-                                        <div className="bg-brand-600/10 border border-brand-500/30 p-8 rounded-3xl text-center">
-                                            <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-                                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">Tournament Concluded</h3>
-                                            <p className="text-gray-400 text-sm font-medium">Congratulations to all the winners!</p>
-                                        </div>
-
-                                        {tournament.manualResults && tournament.manualResults.length > 0 && tournament.resultTemplate && (
-                                            <div className="space-y-3">
-                                                <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest ml-1">Final Standings</h4>
-                                                <ResultBoard results={tournament.manualResults} config={tournament.resultTemplate} />
-                                            </div>
-                                        )}
-
-                                        {tournament.winners && tournament.winners.length > 0 && (
-                                            <div className="space-y-3">
-                                                <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest ml-1">Hall of Fame</h4>
-                                                {tournament.winners.map((winner, i) => (
-                                                    <div key={i} className="bg-surface p-5 rounded-2xl border border-gray-800 flex items-center gap-6 relative overflow-hidden group">
-                                                        {i === 0 && <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 blur-3xl rounded-full"></div>}
-                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${
-                                                            i === 0 ? 'bg-yellow-500/20 text-yellow-500' :
-                                                            i === 1 ? 'bg-gray-300/20 text-gray-300' :
-                                                            i === 2 ? 'bg-orange-500/20 text-orange-500' :
-                                                            'bg-gray-800 text-gray-500'
-                                                        }`}>
-                                                            {winner.rank}
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <div className="text-white font-black text-lg">{winner.username}</div>
-                                                            <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Champion Rank</div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="text-brand-400 font-black text-xl">
-                                                                {tournament.currency === 'USD' ? '$' : tournament.currency === 'EUR' ? '€' : tournament.currency === 'INR' ? '₹' : 'Rs'} {(winner as any).amount?.toLocaleString() || (winner as any).prize?.toLocaleString() || 0}
-                                                            </div>
-                                                            <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Prize Won</div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {tournament.resultUrl && (
-                                            <div className="space-y-3">
-                                                <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest ml-1">Official Results</h4>
-                                                <div className="rounded-3xl overflow-hidden border border-gray-800 shadow-2xl">
-                                                    <img src={tournament.resultUrl || undefined} alt="Match Results" className="w-full h-auto" />
-                                                </div>
-                                            </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div className="py-20 text-center bg-surface rounded-3xl border border-gray-800 border-dashed">
-                                        <Trophy className="w-16 h-16 text-gray-800 mx-auto mb-4" />
-                                        <h3 className="text-xl font-black text-gray-600 uppercase tracking-tighter">Results Pending</h3>
-                                        <p className="text-gray-500 text-sm mt-2">The tournament is still in progress.</p>
-                                    </div>
-                                )}
-                            </motion.div>
-                        )}
                     </AnimatePresence>
+                </div>
                     {/* Related Tournaments */}
                     {relatedTournaments.length > 0 && (
                         <div className="space-y-6 pt-8 border-t border-gray-800/50">
@@ -748,12 +685,11 @@ const TournamentDetails: React.FC = () => {
                             </div>
                         </div>
                     )}
-                </div>
 
                 {/* Sidebar */}
                 <div className="lg:col-span-4 space-y-6">
                     {/* Join Card */}
-                    <div className="bg-surface p-8 rounded-3xl border border-gray-800 shadow-2xl sticky top-4">
+                    <div className="bg-surface p-8 rounded-3xl border border-gray-800 shadow-2xl sticky top-20 sm:top-24">
                         {timeLeft && (
                             <div className="mb-8 text-center">
                                 <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-3 flex items-center justify-center gap-2">
@@ -801,10 +737,10 @@ const TournamentDetails: React.FC = () => {
 
                         {tournament.status === 'completed' ? (
                             <button 
-                                onClick={() => setActiveTab('results')}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
+                                onClick={() => setIsResultModalOpen(true)}
+                                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(79,70,229,0.3)] transition-all active:scale-95 flex items-center justify-center gap-3 group"
                             >
-                                <Trophy className="w-6 h-6" /> View Results
+                                <Trophy className="w-6 h-6 group-hover:scale-110 transition-transform" /> View Results
                             </button>
                         ) : !user ? (
                             <button 
@@ -878,6 +814,12 @@ const TournamentDetails: React.FC = () => {
                     onSuccess={handleJoinSuccess}
                 />
             )}
+
+            <TournamentResultModal
+                isOpen={isResultModalOpen}
+                onClose={() => setIsResultModalOpen(false)}
+                tournament={tournament}
+            />
         </div>
     );
 };

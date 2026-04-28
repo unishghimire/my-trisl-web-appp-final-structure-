@@ -25,7 +25,7 @@ const Tournaments: React.FC = () => {
             try {
                 const [tournamentsSnap, gamesSnap] = await Promise.all([
                     getDocs(collection(db, 'tournaments')),
-                    getDocs(collection(db, 'games'))
+                    getDocs(query(collection(db, 'games'), where('isPublished', '==', true)))
                 ]);
                 
                 let tours = tournamentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tournament));

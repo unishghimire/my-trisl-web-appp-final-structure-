@@ -33,17 +33,17 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ username, avatarUrl, 
     <div className="relative" ref={dropdownRef}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-700 whitespace-nowrap"
+        className="flex items-center justify-center h-10 gap-2 text-sm font-medium text-gray-300 hover:text-white transition bg-gray-800/50 px-3 md:px-4 rounded-full border border-gray-700 whitespace-nowrap shrink-0"
       >
-        <div className="w-6 h-6 bg-brand-700 rounded-full flex items-center justify-center font-bold text-xs">
-          {avatarUrl ? <img src={avatarUrl || undefined} className="w-full h-full rounded-full object-cover" alt="Avatar" /> : username[0].toUpperCase()}
+        <div className="w-6 h-6 shrink-0 bg-brand-700 rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-gray-800 overflow-hidden">
+          {avatarUrl ? <img src={avatarUrl || undefined} className="w-full h-full object-cover" alt="Avatar" /> : username[0].toUpperCase()}
         </div>
-        <span className="hidden md:block truncate max-w-[80px]">{username}</span>
-        <ChevronDown className="w-4 h-4" />
+        <span className="hidden md:block truncate max-w-[80px] font-bold">{username}</span>
+        <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-50">
+        <div className="absolute right-0 mt-2 w-48 bg-card border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-[60]">
           <Link to="/dashboard" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-surface hover:text-white transition">
             <User className="w-4 h-4" /> Dashboard
           </Link>

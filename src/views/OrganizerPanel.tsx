@@ -11,6 +11,7 @@ import ResultUploadModal from '../components/ResultUploadModal';
 import TournamentCreateModal from '../components/TournamentCreateModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
+import { formatCurrency } from '../utils';
 
 const OrganizerPanel: React.FC = () => {
     // Force Vite cache invalidation
@@ -33,11 +34,16 @@ const OrganizerPanel: React.FC = () => {
         try {
             const q = query(
                 collection(db, 'tournaments'),
-                where('hostUid', '==', user.uid),
-                orderBy('createdAt', 'desc')
+                where('hostUid', '==', user.uid)
             );
             const snap = await getDocs(q);
-            setHostedTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
+            let tours = snap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament));
+            tours.sort((a,b) => {
+                const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                return bTime - aTime;
+            });
+            setHostedTournaments(tours);
         } catch (error) {
             console.error("Error fetching hosted tournaments:", error);
         } finally {
@@ -255,9 +261,9 @@ const OrganizerPanel: React.FC = () => {
                     { label: 'Total Hosted', value: stats.total, icon: Trophy, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
                     { label: 'Live Now', value: stats.live, icon: Play, color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/20' },
                     { label: 'Completed', value: stats.completed, icon: Users, color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-green-500/20' },
-                    { label: 'Total Prize Pool', value: `₹${stats.totalPrize.toLocaleString()}`, icon: DollarSign, color: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-                    { label: 'Org Wallet', value: `₹${stats.orgWallet.toLocaleString()}`, icon: CreditCard, color: 'text-brand-500', bg: 'bg-brand-500/10', border: 'border-brand-500/20' },
-                    { label: 'Pending Earnings', value: `₹${stats.pendingEarnings.toLocaleString()}`, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+                    { label: 'Total Prize Pool', value: formatCurrency(stats.totalPrize), icon: DollarSign, color: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
+                    { label: 'Org Wallet', value: formatCurrency(stats.orgWallet), icon: CreditCard, color: 'text-brand-500', bg: 'bg-brand-500/10', border: 'border-brand-500/20' },
+                    { label: 'Pending Earnings', value: formatCurrency(stats.pendingEarnings), icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
                 ].map((stat, i) => (
                     <motion.div 
                         key={i}
@@ -368,7 +374,7 @@ const OrganizerPanel: React.FC = () => {
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="text-[9px] text-gray-500 font-black uppercase tracking-[0.2em] mb-1">Prize Pool</span>
-                                                    <span className="text-sm font-black text-brand-400">₹{t.prizePool?.toLocaleString()}</span>
+                                                    <span className="text-sm font-black text-brand-400">{formatCurrency(t.prizePool)}</span>
                                                 </div>
                                             </div>
                                             <div className="flex gap-3">

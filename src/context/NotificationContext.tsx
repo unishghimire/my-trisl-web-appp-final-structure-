@@ -62,6 +62,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     }
                 }
             });
+        }, (error) => {
+            console.error("Error in tournament snapshot:", error);
         });
 
         // Check for upcoming tournaments every 5 minutes
