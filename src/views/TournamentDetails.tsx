@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, runTransaction, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Tournament, UserProfile } from '../types';
+import { Tournament, UserProfile, Participant } from '../types';
 import { DEFAULT_BANNER } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency, formatDate, getYoutubeId } from '../utils';
@@ -18,6 +18,7 @@ import ProfileLink from '../components/ProfileLink';
 import PrizeBoard from '../components/PrizeBoard';
 import ResultBoard from '../components/ResultBoard';
 import TournamentResultModal from '../components/TournamentResultModal';
+import TournamentGroups from '../components/TournamentGroups';
 
 const TournamentDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -28,7 +29,7 @@ const TournamentDetails: React.FC = () => {
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [isJoined, setIsJoined] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'description' | 'participants' | 'results'>(
+    const [activeTab, setActiveTab] = useState<'overview' | 'description' | 'participants' | 'groups' | 'results'>(
         (searchParams.get('tab') as any) || 'overview'
     );
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
@@ -407,6 +408,7 @@ const TournamentDetails: React.FC = () => {
                             { id: 'overview', label: 'Overview', icon: Info },
                             { id: 'description', label: 'Description', icon: Info },
                             { id: 'participants', label: 'Players', icon: Users },
+                            { id: 'groups', label: 'Groups/Lobbies', icon: Trophy },
                             tournament.status === 'completed' ? { id: 'results', label: 'Results', icon: Trophy } : null
                         ].filter((tab): tab is {id: string, label: string, icon: any} => tab !== null).map((tab) => (
                             <button 
@@ -645,6 +647,21 @@ const TournamentDetails: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
+                            </motion.div>
+                        )}
+
+                        {activeTab === 'groups' && (
+                            <motion.div 
+                                key="groups"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                            >
+                                <TournamentGroups 
+                                    tournament={tournament}
+                                    isOrganizer={user?.uid === tournament.hostUid || profile?.role === 'admin'}
+                                    participants={participants as Participant[]}
+                                />
                             </motion.div>
                         )}
                     </AnimatePresence>

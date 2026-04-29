@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0077787807",
-  "appId": "1:935623640940:web:fa78079f48258173f0d549",
-  "apiKey": "AIzaSyDdKdsIkES-GbkJAm7bLqmStH949UuG_v8",
-  "authDomain": "gen-lang-client-0077787807.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-26f2d1e6-0f23-429d-bff6-19f4e58cf589",
-  "storageBucket": "gen-lang-client-0077787807.firebasestorage.app",
-  "messagingSenderId": "935623640940",
-  "measurementId": "G-E3412GR6V4"
+  "apiKey": "AIzaSyBB_g6da7XmQRtmI-p5JA9a0-bwOn7CySY",
+  "authDomain": "nexplayweb-aec85.firebaseapp.com",
+  "databaseURL": "https://nexplayweb-aec85-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "projectId": "nexplayweb-aec85",
+  "storageBucket": "nexplayweb-aec85.firebasestorage.app",
+  "messagingSenderId": "977729179037",
+  "appId": "1:977729179037:web:0a954d06de43718b19f374",
+  "measurementId": "G-2EPDPX958Q"
 }

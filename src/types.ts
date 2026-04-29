@@ -83,6 +83,35 @@ export interface ResultTemplateConfig {
 export type TournamentStage = 'registration' | 'group_stage' | 'knockout' | 'completed';
 export type TournamentFormat = 'single_elimination' | 'double_elimination' | 'round_robin' | 'swiss' | 'hybrid';
 
+export interface GroupTeam {
+    id: string; // Participant ID or Team ID
+    name: string;
+    score: number;
+    rank: number;
+    isQualified: boolean;
+    players: string[]; // User IDs for permissions
+}
+
+export interface GroupMatch {
+    id: string;
+    mapName: string;
+    status: 'upcoming' | 'live' | 'completed';
+}
+
+export interface LobbyGroup {
+    id: string;
+    tournamentId: string;
+    round: number;
+    name: string;
+    allowedUserIds: string[]; // For Firestore Rules
+    teams: GroupTeam[];
+    matches: GroupMatch[];
+    qualificationRule: number; // e.g., Top 5 -> 5
+    roomId: string;
+    roomPass: string;
+    status: 'upcoming' | 'live' | 'completed';
+}
+
 export interface TournamentGroup {
     id: string;
     name: string;
@@ -92,6 +121,13 @@ export interface TournamentGroup {
     isPublic: boolean;
     passCode?: string;
     inviteLink?: string;
+}
+
+export interface RoundConfig {
+    roundNumber: number;
+    numGroups: number;
+    qualificationRule: number;
+    maps: string[];
 }
 
 export interface MatchChangeLog {
@@ -182,6 +218,8 @@ export interface Tournament {
     distributedAmount?: number;
     manualResults?: ManualResult[];
     resultTemplate?: ResultTemplateConfig;
+    roadmap?: RoundConfig[];
+    currentRound?: number;
 }
 
 export interface Transaction {

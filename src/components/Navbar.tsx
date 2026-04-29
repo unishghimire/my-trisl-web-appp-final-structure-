@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Menu, X, Bell, Crown, Wallet } from 'lucide-react';
@@ -7,6 +7,7 @@ import { Notification } from '../types';
 import ProfileDropdown from './navbar/ProfileDropdown';
 import WalletDisplay from './navbar/WalletDisplay';
 import { formatCurrency } from '../utils';
+import { useClickOutside } from '../hooks/useClickOutside';
 
 const Navbar: React.FC = () => {
     const { user, profile, logout } = useAuth();
@@ -16,6 +17,29 @@ const Navbar: React.FC = () => {
     const [unreadCount, setUnreadCount] = useState(0);
     const navigate = useNavigate();
     const location = useLocation();
+    
+    const notificationRef = useRef<HTMLDivElement>(null);
+    useClickOutside(notificationRef, () => {
+        if (isNotificationsOpen) {
+            setIsNotificationsOpen(false);
+        }
+    });
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && isNotificationsOpen) {
+                setIsNotificationsOpen(false);
+            }
+        };
+
+        if (isNotificationsOpen) {
+            document.addEventListener('keydown', handleKeyDown);
+        }
+
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isNotificationsOpen]);
 
     useEffect(() => {
         setIsMobileMenuOpen(false);
@@ -97,7 +121,7 @@ const Navbar: React.FC = () => {
                     <div className="flex items-center justify-end gap-2 sm:gap-4 shrink-0 z-10">
                         {user ? (
                             <>
-                                <div className="relative">
+                                <div className="relative" ref={notificationRef}>
                                     <button onClick={toggleNotifications} className="text-gray-400 hover:text-white transition-colors relative w-11 h-11 rounded-full hover:bg-white/5 flex items-center justify-center shrink-0">
                                         <Bell className="w-5 h-5" aria-hidden="true" />
                                         {unreadCount > 0 && (

@@ -186,6 +186,22 @@
       },
       "required": ["id", "name", "ownerId", "totalEarnings"]
     },
+    "LobbyGroup": {
+      "title": "LobbyGroup",
+      "description": "Group/Lobby representation for Tournaments & Scrims",
+      "type": "object",
+      "properties": {
+        "tournamentId": { "type": "string" },
+        "round": { "type": "integer" },
+        "name": { "type": "string" },
+        "allowedUserIds": { "type": "array", "items": { "type": "string" } },
+        "qualificationRule": { "type": "integer" },
+        "roomId": { "type": "string" },
+        "roomPass": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["tournamentId", "round", "name", "allowedUserIds", "status"]
+    },
     "MatchHistory": {
       "title": "MatchHistory",
       "description": "Record of a player's or team's match",
@@ -233,6 +249,10 @@
     "/tournaments/{tournamentId}": {
       "schema": "Tournament",
       "description": "Tournament documents"
+    },
+    "/tournaments/{tournamentId}/groups/{groupId}": {
+      "schema": "LobbyGroup",
+      "description": "Groups/Lobbies subcollection for a tournament"
     },
     "/participants/{participantId}": {
       "schema": "Participant",
